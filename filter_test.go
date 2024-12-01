@@ -1348,7 +1348,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "field1 like concat('%', ?, '%')",
+				Query: "cast(field1 as char) like concat('%', cast(? as char), '%')",
 				Args:  []interface{}{"value1"},
 				Err:   nil,
 			},
@@ -1447,7 +1447,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "(field1 = ? and (field2 is null or field3 in (?, ?, ?)) and field4 like concat('%', ?, '%'))",
+				Query: "(field1 = ? and (field2 is null or field3 in (?, ?, ?)) and cast(field4 as char) like concat('%', cast(? as char), '%'))",
 				Args:  []interface{}{"value1", 1, 2, 3, "value4"},
 				Err:   nil,
 			},
@@ -1581,7 +1581,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "field1 = ? and (field2 is null or field3 in (?, ?, ?)) and field4 like concat('%', ?, '%')",
+				Query: "field1 = ? and (field2 is null or field3 in (?, ?, ?)) and cast(field4 as char) like concat('%', cast(? as char), '%')",
 				Args:  []interface{}{"value1", 1, 2, 3, "value4"},
 				Err:   nil,
 			},
@@ -1754,7 +1754,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "field1 ilike concat('%', $1, '%')",
+				Query: "field1::text ilike concat('%', $1::text, '%')",
 				Args:  []interface{}{"value1"},
 				Err:   nil,
 			},
@@ -1802,7 +1802,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "field1 not ilike concat('%', $1, '%')",
+				Query: "field1::text not ilike concat('%', $1::text, '%')",
 				Args:  []interface{}{"value1"},
 				Err:   nil,
 			},
@@ -1877,7 +1877,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "(field1 = $1 and (field2 is null or field3 in ($2, $3, $4)) and field4 ilike concat('%', $5, '%'))",
+				Query: "(field1 = $1 and (field2 is null or field3 in ($2, $3, $4)) and field4::text ilike concat('%', $5::text, '%'))",
 				Args:  []interface{}{"value1", 1, 2, 3, "value4"},
 				Err:   nil,
 			},
@@ -2011,7 +2011,7 @@ func TestFilter_toSQLWithArgs(t *testing.T) {
 				Args  []interface{}
 				Err   error
 			}{
-				Query: "field1 = $1 and (field2 is null or field3 in ($2, $3, $4)) and field4 ilike concat('%', $5, '%')",
+				Query: "field1 = $1 and (field2 is null or field3 in ($2, $3, $4)) and field4::text ilike concat('%', $5::text, '%')",
 				Args:  []interface{}{"value1", 1, 2, 3, "value4"},
 				Err:   nil,
 			},

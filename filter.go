@@ -208,12 +208,12 @@ func (f *Filter) toSQLWithArgs(dialect Dialect, args []interface{}, isRoot bool)
 			return "", nil, err
 		}
 
-		conditionQueryFormat = "%s %s concat('%%', %s, '%%')"
-
 		switch dialect {
 		case DialectMySQL:
+			conditionQueryFormat = "cast(%s as char) %s concat('%%', cast(%s as char), '%%')"
 			filterOperator = filterOperatorMap[f.Operator]
 		case DialectPostgres:
+			conditionQueryFormat = "%s::text %s concat('%%', %s::text, '%%')"
 			filterOperator = fmt.Sprintf("i%s", filterOperatorMap[OperatorLike])
 			if f.Operator == OperatorNotLike {
 				filterOperator = fmt.Sprintf("not i%s", filterOperatorMap[OperatorLike])

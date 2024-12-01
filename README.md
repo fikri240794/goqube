@@ -248,8 +248,8 @@ func main() {
 					table1.field9 in ($8, $9, $10)
 					and table2.field10 not in ($11, $12, $13)
 				)
-				or t3.field11 ilike concat('%', $14, '%')
-				or t4.field12 not ilike concat('%', $15, '%')
+				or t3.field11::text ilike concat('%', $14::text, '%')
+				or t4.field12::text not ilike concat('%', $15::text, '%')
 			)
 		group by
 			table1.field1,
