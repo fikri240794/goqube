@@ -1,22 +1,46 @@
-# goqube
-A simple and flexible SQL query builder for Go, supporting multiple SQL dialects (SQL Server, MySQL, PostgreSQL, SQLite).
+# 🧊 GoQube
 
-## Features
-- Build SELECT, INSERT, UPDATE, DELETE queries with Go structs
-- Supports filters, sorting, grouping, joins, and subqueries
-- Parameterized queries for safe SQL execution
-- Extensible for different SQL dialects
+> SQL query builder for Go with multi-dialect support
 
-## Installation
-```
+## ✨ Features
+
+- 🎯 **Multi-dialect support** - PostgreSQL, MySQL, SQLite, SQL Server
+- 🛡️ **Type-safe query building** - Compile-time safety with Go structs
+- 🔒 **SQL injection protection** - Parameterized queries by default
+- 🧩 **Rich operations** - Complex filters, joins, sorting, and grouping
+
+## 📦 Installation
+
+```bash
 go get github.com/fikri240794/goqube
 ```
 
-## Basic Usage
-All query examples below are simple examples for the Postgres dialect (DialectPostgres). The API is simple and consistent for all query types and other dialects.
+## 🚀 Quick Start
 
----
-### SELECT Example
+```go
+import "github.com/fikri240794/goqube"
+
+// Build a simple SELECT query
+query := &goqube.SelectQuery{
+    Fields: []goqube.Field{{Column: "id"}, {Column: "name"}},
+    Table:  goqube.Table{Name: "users"},
+    Filter: &goqube.Filter{
+        Field:    goqube.Field{Column: "active"},
+        Operator: goqube.OperatorEqual,
+        Value:    goqube.FilterValue{Value: true},
+    },
+}
+
+sql, args, err := query.BuildSelectQuery(goqube.DialectPostgres)
+// SQL: SELECT id, name FROM users WHERE active = $1
+// Args: [true]
+```
+
+## 📚 Examples
+
+> 💡 **Want more examples?** Check out the [examples](examples/) directory for comprehensive demonstrations of all query types and dialects!
+
+### 🔍 SELECT Example
 ```go
 q := &SelectQuery{
     Fields: []Field{{Column: "id"}, {Column: "name"}},
@@ -31,15 +55,11 @@ q := &SelectQuery{
     Skip:  0,
 }
 sql, args, err := q.BuildSelectQuery(DialectPostgres)
-fmt.Println("SQL:", sql)
-fmt.Println("Args:", args)
-// Output
-// SQL: SELECT id, name FROM users WHERE status = $1 ORDER BY id DESC OFFSET $2 LIMIT $3
-// Args: [active 0 10]
+// SQL: SELECT id, name FROM users WHERE status = $1 ORDER BY id DESC LIMIT $2 OFFSET $3
+// Args: [active 10 0]
 ```
 
----
-### INSERT Example
+### ➕ INSERT Example
 ```go
 q := &InsertQuery{
     Table: "users",
@@ -48,15 +68,11 @@ q := &InsertQuery{
     },
 }
 sql, args, err := q.BuildInsertQuery(DialectPostgres)
-fmt.Println("SQL:", sql)
-fmt.Println("Args:", args)
-// Output:
 // SQL: INSERT INTO users (id, name) VALUES ($1, $2)
 // Args: [1 foo]
 ```
 
----
-### UPDATE Example
+### ✏️ UPDATE Example
 ```go
 q := &UpdateQuery{
     Table: "users",
@@ -70,15 +86,11 @@ q := &UpdateQuery{
     },
 }
 sql, args, err := q.BuildUpdateQuery(DialectPostgres)
-fmt.Println("SQL:", sql)
-fmt.Println("Args:", args)
-// Output:
 // SQL: UPDATE users SET name = $1 WHERE id = $2
 // Args: [bar 1]
 ```
 
----
-### DELETE Example
+### 🗑️ DELETE Example
 ```go
 q := &DeleteQuery{
     Table: "users",
@@ -89,9 +101,21 @@ q := &DeleteQuery{
     },
 }
 sql, args, err := q.BuildDeleteQuery(DialectPostgres)
-fmt.Println("SQL:", sql)
-fmt.Println("Args:", args)
-// Output:
 // SQL: DELETE FROM users WHERE id = $1
 // Args: [1]
 ```
+
+## 🗄️ Supported SQL Dialects
+
+<div align="center">
+
+| Database | Placeholder Style | Example Query |
+|----------|-------------------|---------------|
+| **PostgreSQL** | `$1, $2, $3` | `SELECT * FROM users WHERE id = $1` |
+| **MySQL** | `?` | `SELECT * FROM users WHERE id = ?` |
+| **SQLite** | `?` | `SELECT * FROM users WHERE id = ?` |
+| **SQL Server** | `@p0, @p1, @p2` | `SELECT * FROM users WHERE id = @p0` |
+
+</div>
+
+---

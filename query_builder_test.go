@@ -8,7 +8,6 @@ import (
 )
 
 // TestDynamicQueryBuilder_buildFieldForFilter tests the buildFieldForFilter method for various field types and subquery scenarios.
-// It verifies correct SQL generation and error handling for subqueries, qualified columns, and invalid fields.
 func TestDynamicQueryBuilder_buildFieldForFilter(t *testing.T) {
 	type args struct {
 		f                Field
@@ -106,7 +105,6 @@ func TestDynamicQueryBuilder_buildFieldForFilter(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildFields tests the buildFields method for various field types, subqueries, and aliases.
-// It ensures correct SQL generation and argument collection for each field scenario, including error handling.
 func TestDynamicQueryBuilder_buildFields(t *testing.T) {
 	type args struct {
 		fields           []Field
@@ -239,7 +237,6 @@ func TestDynamicQueryBuilder_buildFields(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildFilter tests the buildFilter method for various filter scenarios, including nested groups and error propagation.
-// It ensures correct SQL generation, argument collection, and normalization for different filter logic and edge cases.
 func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 	type args struct {
 		f                *Filter
@@ -435,7 +432,6 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildFilterValue tests the buildFilterValue method for different operator and value scenarios.
-// It verifies correct SQL placeholder generation and argument collection for columns, slices, arrays, and error cases.
 func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 	type args struct {
 		op   Operator
@@ -573,7 +569,6 @@ func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildGroupBy tests the buildGroupBy method for various field combinations in GROUP BY clauses.
-// It ensures correct SQL generation for single, multiple, and invalid fields, including error handling.
 func TestDynamicQueryBuilder_buildGroupBy(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -626,7 +621,6 @@ func TestDynamicQueryBuilder_buildGroupBy(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildJoins tests the buildJoins method for various join scenarios, including single, multiple, and error cases.
-// It ensures correct SQL generation and error handling for different join types, table, and filter combinations.
 func TestDynamicQueryBuilder_buildJoins(t *testing.T) {
 	// Initialize a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -700,7 +694,6 @@ func TestDynamicQueryBuilder_buildJoins(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildOrderBy tests the buildOrderBy method for various sorting scenarios, including single, multiple, and invalid fields.
-// It ensures correct SQL generation and error handling for ORDER BY clauses with different field and direction combinations.
 func TestDynamicQueryBuilder_buildOrderBy(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -759,7 +752,6 @@ func TestDynamicQueryBuilder_buildOrderBy(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildPlaceholdersAndArgs tests the buildPlaceholdersAndArgs method for various value and column scenarios.
-// It ensures correct SQL placeholder generation and argument collection for multi-row inserts, single-row updates, and unsupported types.
 func TestDynamicQueryBuilder_buildPlaceholdersAndArgs(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -838,7 +830,6 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgs(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex tests the buildPlaceholdersAndArgsWithIndex method for indexed placeholders in SQL queries.
-// It ensures correct SQL and argument generation for multi-row inserts, single-row updates, and unsupported types using a custom placeholder function.
 func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -904,7 +895,6 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildTable tests the buildTable method for various table scenarios, including subqueries, aliases, and error cases.
-// It ensures correct SQL generation and argument collection for subqueries, plain tables, and error propagation.
 func TestDynamicQueryBuilder_buildTable(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -999,7 +989,6 @@ func TestDynamicQueryBuilder_buildTable(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildDeleteQuery tests the buildDeleteQuery method for various delete scenarios, including table validation and filter application.
-// It ensures correct SQL generation, argument handling, and error propagation for different filter and table cases.
 func TestDynamicQueryBuilder_buildDeleteQuery(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -1081,7 +1070,6 @@ func TestDynamicQueryBuilder_buildDeleteQuery(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildInsertQuery tests the buildInsertQuery method for various insert scenarios, including placeholder formats and error cases.
-// It ensures correct SQL and argument generation for nil queries, empty tables, empty values, and both simple and indexed placeholders.
 func TestDynamicQueryBuilder_buildInsertQuery(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -1159,7 +1147,6 @@ func TestDynamicQueryBuilder_buildInsertQuery(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildUpdateQueryWithContinuousIndex tests the buildUpdateQueryWithContinuousIndex method for various update scenarios with indexed placeholders.
-// It ensures correct SQL and argument generation for nil queries, empty tables, empty fields, valid updates, and error propagation in filter logic.
 func TestDynamicQueryBuilder_buildUpdateQueryWithContinuousIndex(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -1260,7 +1247,6 @@ func TestDynamicQueryBuilder_buildUpdateQueryWithContinuousIndex(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_buildUpdateQuery tests the buildUpdateQuery method for various update scenarios, including placeholder handling and filter logic.
-// It ensures correct SQL and argument generation for nil queries, empty tables, empty fields, valid updates, and error propagation in filter and placeholder logic.
 func TestDynamicQueryBuilder_buildUpdateQuery(t *testing.T) {
 	// Create a new dynamicQueryBuilder instance for testing.
 	dqb := &dynamicQueryBuilder{}
@@ -1356,7 +1342,6 @@ func TestDynamicQueryBuilder_buildUpdateQuery(t *testing.T) {
 }
 
 // TestDynamicQueryBuilder_nextPlaceholder tests the nextPlaceholder method for different placeholder formats and index handling.
-// It ensures correct placeholder string generation and index incrementation for various SQL dialects.
 func TestDynamicQueryBuilder_nextPlaceholder(t *testing.T) {
 	// Define test cases for different placeholder formats and starting indices.
 	tests := []struct {

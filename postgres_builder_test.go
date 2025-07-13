@@ -8,7 +8,6 @@ import (
 )
 
 // Test_newPostgresBuilder verifies that newPostgresBuilder returns a valid builder with the correct placeholder format for PostgreSQL.
-// It ensures the builder is not nil and uses the "$%d" placeholder format as expected by PostgreSQL queries.
 func Test_newPostgresBuilder(t *testing.T) {
 	b := newPostgresBuilder()
 	if b == nil {
@@ -22,7 +21,6 @@ func Test_newPostgresBuilder(t *testing.T) {
 }
 
 // TestPostgresBuilder_BuildDeleteQuery tests the BuildDeleteQuery method for various DeleteQuery scenarios, including nil queries, empty tables, and filters.
-// It ensures the generated SQL and arguments are correct and errors are handled as expected.
 func TestPostgresBuilder_BuildDeleteQuery(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -98,7 +96,6 @@ func TestPostgresBuilder_BuildDeleteQuery(t *testing.T) {
 }
 
 // TestPostgresBuilder_BuildInsertQuery tests the BuildInsertQuery method for various InsertQuery scenarios, including nil queries, empty tables, and valid inserts.
-// It checks that the generated SQL and arguments match expectations and that errors are handled correctly.
 func TestPostgresBuilder_BuildInsertQuery(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -158,7 +155,6 @@ func TestPostgresBuilder_BuildInsertQuery(t *testing.T) {
 }
 
 // TestPostgresBuilder_BuildSelectQuery tests the BuildSelectQuery method for various SelectQuery scenarios, including raw queries, error cases, and valid selects.
-// It verifies that the generated SQL, arguments, and error handling match expectations for each scenario.
 func TestPostgresBuilder_BuildSelectQuery(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -266,7 +262,6 @@ func TestPostgresBuilder_BuildSelectQuery(t *testing.T) {
 }
 
 // TestPostgresBuilder_BuildUpdateQuery tests the BuildUpdateQuery method for various UpdateQuery scenarios, including nil queries, empty tables, empty fields, and valid updates.
-// It checks that the generated SQL, arguments, and error handling are correct for each scenario.
 func TestPostgresBuilder_BuildUpdateQuery(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -342,7 +337,6 @@ func TestPostgresBuilder_BuildUpdateQuery(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildFilter tests the buildFilter method for various filter scenarios, including error propagation, group logic, and LIKE operators.
-// It ensures that the generated SQL, arguments, and error handling are correct for each filter case.
 func TestPostgresBuilder_buildFilter(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -449,7 +443,6 @@ func TestPostgresBuilder_buildFilter(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildFieldForFilter tests the buildFieldForFilter method for various field scenarios, including subqueries, table-qualified columns, and error cases.
-// It ensures that the generated SQL and error handling are correct for each field type.
 func TestPostgresBuilder_buildFieldForFilter(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -515,7 +508,6 @@ func TestPostgresBuilder_buildFieldForFilter(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildFilterValue tests the buildFilterValue method for various filter value scenarios, including LIKE, IN, subqueries, columns, and error cases.
-// It ensures the generated SQL, arguments, and error handling are correct for each filter value type.
 func TestPostgresBuilder_buildFilterValue(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -637,7 +629,6 @@ func TestPostgresBuilder_buildFilterValue(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildFilterValueLike tests the buildFilterValueLike method for various LIKE filter value scenarios, including subqueries, columns, string values, and error cases.
-// It ensures the generated SQL, arguments, and error handling are correct for each LIKE filter value type.
 func TestPostgresBuilder_buildFilterValueLike(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -712,7 +703,6 @@ func TestPostgresBuilder_buildFilterValueLike(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildGroupBy tests the buildGroupBy method for various group by scenarios, including empty fields, single field, multiple fields, and error cases.
-// It ensures the generated SQL and error handling are correct for each group by case.
 func TestPostgresBuilder_buildGroupBy(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -761,7 +751,6 @@ func TestPostgresBuilder_buildGroupBy(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildJoins tests the buildJoins method for various join scenarios, including no joins, single join, multiple joins, and error cases.
-// It ensures the generated SQL and error handling are correct for each join case.
 func TestPostgresBuilder_buildJoins(t *testing.T) {
 	b := newPostgresBuilder()
 	// fakeFilter simulates the filter logic for join conditions, returning an error if the column is "err".
@@ -829,7 +818,6 @@ func TestPostgresBuilder_buildJoins(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildOrderBy tests the buildOrderBy method for various order by scenarios, including empty sorts, single and multiple sorts, and error cases.
-// It ensures the generated SQL and error handling are correct for each order by case.
 func TestPostgresBuilder_buildOrderBy(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -890,7 +878,6 @@ func TestPostgresBuilder_buildOrderBy(t *testing.T) {
 }
 
 // TestPostgresBuilder_buildTable tests the buildTable method for various table scenarios, including plain tables, aliases, subqueries, and error cases.
-// It ensures the generated SQL, arguments, and error handling are correct for each table case.
 func TestPostgresBuilder_buildTable(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {
@@ -964,7 +951,6 @@ func TestPostgresBuilder_buildTable(t *testing.T) {
 }
 
 // TestPostgresBuilder_nextPlaceholder tests the nextPlaceholder method for generating PostgreSQL-style placeholders with incrementing indices.
-// It ensures that the correct placeholder strings are produced for single and multiple calls, starting from any index.
 func TestPostgresBuilder_nextPlaceholder(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {

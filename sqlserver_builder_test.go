@@ -6,7 +6,6 @@ import (
 )
 
 // Test_newSQLServerBuilder verifies that newSQLServerBuilder returns a valid builder with the correct placeholder format for SQL Server.
-// It ensures the builder is not nil and uses the "@p%d" placeholder format as required by SQL Server queries.
 func Test_newSQLServerBuilder(t *testing.T) {
 	b := newSQLServerBuilder()
 	if b == nil {
@@ -20,7 +19,6 @@ func Test_newSQLServerBuilder(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_BuildDeleteQuery verifies the SQL Server builder's ability to generate DELETE queries correctly for various scenarios.
-// It checks for correct SQL, arguments, and error handling for nil queries, empty tables, basic deletes, and deletes with filters.
 func Test_sqlServerBuilder_BuildDeleteQuery(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -88,7 +86,6 @@ func Test_sqlServerBuilder_BuildDeleteQuery(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_BuildInsertQuery verifies the SQL Server builder's ability to generate INSERT queries for various scenarios.
-// It checks for correct SQL, arguments, and error handling for nil queries, empty tables, missing values, and single/multi-row inserts.
 func Test_sqlServerBuilder_BuildInsertQuery(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -157,7 +154,6 @@ func Test_sqlServerBuilder_BuildInsertQuery(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_BuildSelectQuery verifies the SQL Server builder's ability to generate SELECT queries for various scenarios.
-// It checks for correct SQL, arguments, and error handling for nil queries, raw queries, filters, grouping, ordering, limits, joins, and error cases.
 func Test_sqlServerBuilder_BuildSelectQuery(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -326,7 +322,6 @@ func Test_sqlServerBuilder_BuildSelectQuery(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_BuildUpdateQuery verifies the SQL Server builder's ability to generate UPDATE queries for various scenarios.
-// It checks for correct SQL, arguments, and error handling for nil queries, empty tables, empty fields, valid updates, and filter errors.
 func Test_sqlServerBuilder_BuildUpdateQuery(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -411,7 +406,6 @@ func Test_sqlServerBuilder_BuildUpdateQuery(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildFields verifies the builder's ability to generate field lists for SELECT queries in various scenarios.
-// It checks for correct SQL fragments and error handling for single/multiple columns, table prefixes, aliases, subqueries, and invalid fields.
 func Test_sqlServerBuilder_buildFields(t *testing.T) {
 	b := newSQLServerBuilder()
 	dummySelect := &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}}
@@ -478,7 +472,6 @@ func Test_sqlServerBuilder_buildFields(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildFieldForFilter verifies the builder's ability to generate correct SQL fragments for fields used in filters.
-// It checks for proper handling of subqueries, table prefixes, aliases, and error cases for invalid fields.
 func Test_sqlServerBuilder_buildFieldForFilter(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery test cases.
@@ -543,7 +536,6 @@ func Test_sqlServerBuilder_buildFieldForFilter(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildFilter verifies the builder's ability to generate SQL WHERE clauses from various filter structures.
-// It checks for correct SQL, argument handling, and error propagation for nil filters, logical groups, operators, and invalid cases.
 func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -687,7 +679,6 @@ func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildFilterValue verifies the builder's ability to generate SQL fragments and arguments for filter values with various operators.
-// It checks for correct handling of LIKE, IN, subqueries, columns, and error cases for invalid or empty values.
 func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery value test cases.
@@ -819,7 +810,6 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildFilterValueLike verifies the builder's ability to generate SQL fragments and arguments for LIKE filter values.
-// It checks for correct handling of subqueries, table-qualified columns, string values, and error cases for invalid or nil values.
 func Test_sqlServerBuilder_buildFilterValueLike(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery value test cases.
@@ -904,7 +894,6 @@ func Test_sqlServerBuilder_buildFilterValueLike(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildGroupBy verifies the builder's ability to generate SQL GROUP BY clauses for various field scenarios.
-// It checks for correct SQL fragments and error handling for single/multiple columns, table prefixes, subqueries, and invalid fields.
 func Test_sqlServerBuilder_buildGroupBy(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery test cases.
@@ -963,7 +952,6 @@ func Test_sqlServerBuilder_buildGroupBy(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildJoins verifies the builder's ability to generate SQL JOIN clauses for various join scenarios.
-// It checks for correct SQL fragments and error handling for empty joins, single/multiple joins, subquery tables, and invalid join definitions.
 func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery join test cases.
@@ -1058,7 +1046,6 @@ func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildOrderBy verifies the builder's ability to generate SQL ORDER BY clauses for various sorting scenarios.
-// It checks for correct SQL fragments and error handling for no sorts, single/multiple sorts, table prefixes, aliases, and invalid fields or directions.
 func Test_sqlServerBuilder_buildOrderBy(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
@@ -1133,7 +1120,6 @@ func Test_sqlServerBuilder_buildOrderBy(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_buildTable verifies the builder's ability to generate SQL fragments for table references in various scenarios.
-// It checks for correct SQL fragments and error handling for simple tables, aliases, subqueries, and invalid table definitions.
 func Test_sqlServerBuilder_buildTable(t *testing.T) {
 	b := newSQLServerBuilder()
 	// Create a dummy select query for subquery table test cases.
@@ -1200,7 +1186,6 @@ func Test_sqlServerBuilder_buildTable(t *testing.T) {
 }
 
 // Test_sqlServerBuilder_nextPlaceholder verifies the builder's ability to generate sequential parameter placeholders for SQL Server queries.
-// It checks that the placeholders are correctly formatted and incremented for different starting indices.
 func Test_sqlServerBuilder_nextPlaceholder(t *testing.T) {
 	b := newSQLServerBuilder()
 	tests := []struct {
