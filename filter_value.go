@@ -1,79 +1,10 @@
 package goqube
 
-import "fmt"
-
+// FilterValue represents a value or expression used in SQL filter conditions (e.g., WHERE or HAVING).
+// It can reference a column, a subquery, a table, or a direct value for comparison.
 type FilterValue struct {
-	Value       interface{}
-	Table       string
-	Column      string
-	SelectQuery *SelectQuery
-}
-
-func NewFilterValue(value interface{}) *FilterValue {
-	return &FilterValue{
-		Value: value,
-	}
-}
-
-func NewColumnFilterValue(column string) *FilterValue {
-	return &FilterValue{
-		Column: column,
-	}
-}
-
-func NewSelectQueryFilterValue(selectQuery *SelectQuery) *FilterValue {
-	return &FilterValue{
-		SelectQuery: selectQuery,
-	}
-}
-
-func (v *FilterValue) FromTable(table string) *FilterValue {
-	v.Table = table
-
-	return v
-}
-
-func (v *FilterValue) validate(dialect Dialect) error {
-	if dialect == "" {
-		return ErrDialectIsRequired
-	}
-
-	return nil
-}
-
-func (v *FilterValue) ToSQLWithArgs(dialect Dialect, args []interface{}) (string, []interface{}, error) {
-	var (
-		query string
-		err   error
-	)
-
-	err = v.validate(dialect)
-	if err != nil {
-		return "", nil, err
-	}
-
-	if v.SelectQuery != nil {
-		query, args, err = v.SelectQuery.ToSQLWithArgsWithAlias(dialect, args)
-		if err != nil {
-			return "", nil, err
-		}
-
-		query = fmt.Sprintf("(%s)", query)
-
-		return query, args, nil
-	}
-
-	if v.SelectQuery == nil && v.Column != "" {
-		query = v.Column
-
-		if v.Table != "" {
-			query = fmt.Sprintf("%s.%s", v.Table, query)
-		}
-
-		return query, args, nil
-	}
-
-	args = append(args, v.Value)
-
-	return "", args, nil
+	Column      string       // Column is the name of the table column used in the filter.
+	SelectQuery *SelectQuery // SelectQuery is an optional subquery used as a filter value.
+	Table       string       // Table is the name of the table this filter value belongs to.
+	Value       interface{}  // Value is the actual value or expression to compare against.
 }

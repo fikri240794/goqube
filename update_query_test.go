@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-// TestInsertQuery_BuildInsertQuery tests the BuildInsertQuery method for different SQL dialects and scenarios.
+// TestUpdateQuery_BuildUpdateQuery tests the BuildUpdateQuery method for different SQL dialects and scenarios.
 // It checks for correct SQL generation, argument handling, and error responses for supported and unsupported dialects.
-func TestInsertQuery_BuildInsertQuery(t *testing.T) {
+func TestUpdateQuery_BuildUpdateQuery(t *testing.T) {
 	tests := []struct {
 		name       string
 		dialect    Dialect
@@ -20,15 +20,15 @@ func TestInsertQuery_BuildInsertQuery(t *testing.T) {
 		{"SQLServer", DialectSQLServer, nil, true, true},
 		{"Unsupported", "", ErrUnsupportedDialect, false, false},
 	}
-	// Create a simple insert query for testing.
-	q := &InsertQuery{
-		Table:  "users",
-		Values: []map[string]interface{}{{"name": "Alice", "age": 30}},
+	// Create a simple update query for testing.
+	q := &UpdateQuery{
+		Table:       "users",
+		FieldsValue: map[string]interface{}{"name": "Bob", "age": 40},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build the insert query for the given dialect.
-			sql, args, err := q.BuildInsertQuery(tt.dialect)
+			// Build the update query for the given dialect.
+			sql, args, err := q.BuildUpdateQuery(tt.dialect)
 			if tt.expectErr != nil {
 				// Check for expected error on unsupported dialects.
 				if err != tt.expectErr {

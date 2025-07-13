@@ -1,88 +1,9 @@
 package goqube
 
-import "fmt"
-
+// Table represents a database table or a subquery used as a table in SQL queries.
+// It is used to define the source of data for SELECT, JOIN, or other SQL operations.
 type Table struct {
-	Name        string
-	SelectQuery *SelectQuery
-	Alias       string
-}
-
-func NewTable(name string) *Table {
-	return &Table{
-		Name: name,
-	}
-}
-
-func NewSelectQueryTable(selectQuery *SelectQuery) *Table {
-	return &Table{
-		SelectQuery: selectQuery,
-	}
-}
-
-func (t *Table) As(alias string) *Table {
-	t.Alias = alias
-	return t
-}
-
-func (t *Table) validate(dialect Dialect) error {
-	if dialect == "" {
-		return ErrDialectIsRequired
-	}
-
-	if t.Name != "" && t.SelectQuery != nil {
-		return ErrConflictTableNameAndTableSelectQuery
-	}
-
-	if t.Name == "" && t.SelectQuery == nil {
-		return ErrNameIsRequired
-	}
-
-	if t.Alias == "" && t.SelectQuery != nil {
-		return ErrAliasIsRequired
-	}
-
-	return nil
-}
-
-func (t *Table) ToSQLWithArgs(dialect Dialect, args []interface{}) (string, []interface{}, error) {
-	var (
-		table string
-		err   error
-	)
-
-	err = t.validate(dialect)
-	if err != nil {
-		return "", nil, err
-	}
-
-	table = t.Name
-	if t.SelectQuery != nil {
-		table, args, err = t.SelectQuery.ToSQLWithArgsWithAlias(dialect, args)
-		if err != nil {
-			return "", nil, err
-		}
-
-		table = fmt.Sprintf("(%s)", table)
-	}
-
-	return table, args, nil
-}
-
-func (t *Table) ToSQLWithArgsWithAlias(dialect Dialect, args []interface{}) (string, []interface{}, error) {
-	var (
-		table string
-		err   error
-	)
-
-	table, args, err = t.ToSQLWithArgs(dialect, args)
-	if err != nil {
-		return "", nil, err
-	}
-
-	if t.Alias != "" {
-		table = fmt.Sprintf("%s as %s", table, t.Alias)
-	}
-
-	return table, args, nil
+	Alias       string       // Alias is the optional name used to reference this table in the query.
+	Name        string       // Name is the actual name of the database table.
+	SelectQuery *SelectQuery // SelectQuery is an optional subquery used as a table source.
 }
