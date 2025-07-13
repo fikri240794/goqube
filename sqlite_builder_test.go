@@ -6,7 +6,6 @@ import (
 )
 
 // Test_newSQLiteBuilder verifies that newSQLiteBuilder returns a valid builder with the correct placeholder format for SQLite.
-// It ensures the builder is not nil and uses the "?" placeholder format as required by SQLite queries.
 func Test_newSQLiteBuilder(t *testing.T) {
 	b := newSQLiteBuilder()
 	if b == nil {
@@ -20,7 +19,6 @@ func Test_newSQLiteBuilder(t *testing.T) {
 }
 
 // Test_sqliteBuilder_BuildDeleteQuery tests the BuildDeleteQuery method for various DeleteQuery scenarios, including nil queries, empty tables, valid deletes, and deletes with filters.
-// It ensures the generated SQL, arguments, and error handling are correct for each scenario.
 func Test_sqliteBuilder_BuildDeleteQuery(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -85,7 +83,6 @@ func Test_sqliteBuilder_BuildDeleteQuery(t *testing.T) {
 }
 
 // Test_sqliteBuilder_BuildInsertQuery tests the BuildInsertQuery method for various InsertQuery scenarios, including nil queries, empty tables, no values, single row, and multi-row inserts.
-// It ensures the generated SQL, arguments, and error handling are correct for each insert scenario.
 func Test_sqliteBuilder_BuildInsertQuery(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -151,7 +148,6 @@ func Test_sqliteBuilder_BuildInsertQuery(t *testing.T) {
 }
 
 // Test_sqliteBuilder_BuildSelectQuery tests the BuildSelectQuery method for various SelectQuery scenarios, including errors from subcomponents, joins, filters, and valid selects.
-// It ensures the generated SQL, arguments, and error handling are correct for each select scenario.
 func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -287,7 +283,6 @@ func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 }
 
 // Test_sqliteBuilder_BuildUpdateQuery tests the BuildUpdateQuery method for various UpdateQuery scenarios, including nil queries, empty tables, no values, basic updates, and updates with filters.
-// It ensures the generated SQL, arguments, and error handling are correct for each update scenario.
 func Test_sqliteBuilder_BuildUpdateQuery(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -353,7 +348,6 @@ func Test_sqliteBuilder_BuildUpdateQuery(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildFields tests the buildFields method for various field scenarios, including empty, valid, and invalid fields.
-// It ensures the generated field string, arguments, and error handling are correct for each case.
 func Test_sqliteBuilder_buildFields(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -407,7 +401,6 @@ func Test_sqliteBuilder_buildFields(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildFilter tests the buildFilter method for various filter scenarios, including nil, invalid, and valid filters.
-// It ensures the generated filter string, arguments, and error handling are correct for each case.
 func Test_sqliteBuilder_buildFilter(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -461,7 +454,6 @@ func Test_sqliteBuilder_buildFilter(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildGroupBy tests the buildGroupBy method for various group by scenarios, including empty, single, multiple, and invalid fields.
-// It ensures the generated group by string and error handling are correct for each case.
 func Test_sqliteBuilder_buildGroupBy(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -511,7 +503,6 @@ func Test_sqliteBuilder_buildGroupBy(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildJoins tests the buildJoins method for various join scenarios, including empty, invalid, and valid joins.
-// It ensures the generated join string, arguments, and error handling are correct for each case.
 func Test_sqliteBuilder_buildJoins(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -565,7 +556,6 @@ func Test_sqliteBuilder_buildJoins(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildOrderBy tests the buildOrderBy method for various order by scenarios, including empty, single, multiple, and invalid sorts.
-// It ensures the generated order by string and error handling are correct for each case.
 func Test_sqliteBuilder_buildOrderBy(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {
@@ -621,7 +611,6 @@ func Test_sqliteBuilder_buildOrderBy(t *testing.T) {
 }
 
 // Test_sqliteBuilder_buildTable tests the buildTable method for various table scenarios, including empty, simple, and aliased tables.
-// It ensures the generated table string, arguments, and error handling are correct for each case.
 func Test_sqliteBuilder_buildTable(t *testing.T) {
 	b := newSQLiteBuilder()
 	tests := []struct {

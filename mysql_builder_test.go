@@ -7,7 +7,6 @@ import (
 )
 
 // Test_newMySQLBuilder verifies that newMySQLBuilder returns a valid builder with the correct placeholder format for MySQL.
-// It ensures the builder is not nil and uses the "?" placeholder format as required by MySQL queries.
 func Test_newMySQLBuilder(t *testing.T) {
 	b := newMySQLBuilder()
 	if b == nil {
@@ -21,7 +20,6 @@ func Test_newMySQLBuilder(t *testing.T) {
 }
 
 // TestMySQLBuilder_BuildDeleteQuery tests the BuildDeleteQuery method for various DeleteQuery scenarios, including nil queries, empty tables, valid deletes, and error cases.
-// It ensures the generated SQL and arguments are correct and errors are handled as expected for each scenario.
 func TestMySQLBuilder_BuildDeleteQuery(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -98,7 +96,6 @@ func TestMySQLBuilder_BuildDeleteQuery(t *testing.T) {
 }
 
 // TestMySQLBuilder_BuildInsertQuery tests the BuildInsertQuery method for various InsertQuery scenarios, including nil queries, empty tables, empty values, and valid inserts.
-// It checks that the generated SQL and arguments match expectations and that errors are handled correctly for each case.
 func TestMySQLBuilder_BuildInsertQuery(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -165,7 +162,6 @@ func TestMySQLBuilder_BuildInsertQuery(t *testing.T) {
 }
 
 // TestMySQLBuilder_BuildSelectQuery tests the BuildSelectQuery method for various SelectQuery scenarios, including raw queries, error cases, and valid selects.
-// It verifies that the generated SQL, arguments, and error handling match expectations for each scenario.
 func TestMySQLBuilder_BuildSelectQuery(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -274,7 +270,6 @@ func TestMySQLBuilder_BuildSelectQuery(t *testing.T) {
 }
 
 // TestMySQLBuilder_BuildUpdateQuery tests the BuildUpdateQuery method for various UpdateQuery scenarios, including nil queries, empty tables, empty fields, valid updates, and error cases.
-// It checks that the generated SQL, arguments, and error handling are correct for each scenario.
 func TestMySQLBuilder_BuildUpdateQuery(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -349,7 +344,6 @@ func TestMySQLBuilder_BuildUpdateQuery(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildFields tests the buildFields method for various field scenarios, including single and multiple columns, aliases, table-qualified columns, and error cases.
-// It ensures the generated SQL, arguments, and error handling are correct for each field type.
 func TestMySQLBuilder_buildFields(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -423,7 +417,6 @@ func TestMySQLBuilder_buildFields(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildFilter tests the buildFilter method for various filter scenarios, including error propagation, group logic, and value handling.
-// It ensures that the generated SQL, arguments, and error handling are correct for each filter case.
 func TestMySQLBuilder_buildFilter(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -521,7 +514,6 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildGroupBy tests the buildGroupBy method for various scenarios, including empty, single, and multiple fields, as well as error cases.
-// It ensures the generated SQL and error handling are correct for each group by field scenario.
 func TestMySQLBuilder_buildGroupBy(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -570,7 +562,6 @@ func TestMySQLBuilder_buildGroupBy(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildJoins tests the buildJoins method for different join scenarios, including no joins, single join, multiple joins, and error cases.
-// It verifies that the generated SQL and error handling are correct for each join configuration.
 func TestMySQLBuilder_buildJoins(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -636,7 +627,6 @@ func TestMySQLBuilder_buildJoins(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildOrderBy tests the buildOrderBy method for various sorting scenarios, including no sorts, single and multiple sorts, and error cases.
-// It ensures the generated SQL and error handling are correct for each order by configuration.
 func TestMySQLBuilder_buildOrderBy(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
@@ -691,7 +681,6 @@ func TestMySQLBuilder_buildOrderBy(t *testing.T) {
 }
 
 // TestMySQLBuilder_buildTable tests the buildTable method for various table scenarios, including empty tables, simple tables, tables with aliases, subquery tables, and error cases.
-// It ensures the generated SQL and error handling are correct for each table configuration.
 func TestMySQLBuilder_buildTable(t *testing.T) {
 	b := newMySQLBuilder()
 	tests := []struct {
