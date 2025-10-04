@@ -18,6 +18,331 @@ func Test_newSQLServerBuilder(t *testing.T) {
 	}
 }
 
+// Test_sqlServerBuilder_adjustRawQueryPlaceholders tests the adjustRawQueryPlaceholders method for various raw SQL scenarios with SQL Server-style placeholders.
+func Test_sqlServerBuilder_adjustRawQueryPlaceholders(t *testing.T) {
+	b := newSQLServerBuilder()
+	tests := []struct {
+		name           string
+		rawSQL         string
+		rawArgs        []interface{}
+		paramIndex     int
+		wantSQL        string
+		wantArgs       []interface{}
+		wantParamIndex int
+	}{
+		{
+			name:           "empty raw SQL",
+			rawSQL:         "",
+			rawArgs:        []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+		},
+		{
+			name:           "empty raw args",
+			rawSQL:         "SELECT * FROM users",
+			rawArgs:        []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+		},
+		{
+			name:           "single placeholder adjustment",
+			rawSQL:         "SELECT * FROM users WHERE id = @p0",
+			rawArgs:        []interface{}{123},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p0",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+		},
+		{
+			name:           "single placeholder with offset",
+			rawSQL:         "SELECT * FROM users WHERE id = @p0",
+			rawArgs:        []interface{}{123},
+			paramIndex:     3,
+			wantSQL:        "SELECT * FROM users WHERE id = @p3",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 4,
+		},
+		{
+			name:           "multiple placeholders adjustment",
+			rawSQL:         "SELECT * FROM users WHERE age > @p0 AND status = @p1",
+			rawArgs:        []interface{}{18, "active"},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE age > @p0 AND status = @p1",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 2,
+		},
+		{
+			name:           "multiple placeholders with offset",
+			rawSQL:         "SELECT * FROM users WHERE age > @p0 AND status = @p1",
+			rawArgs:        []interface{}{18, "active"},
+			paramIndex:     5,
+			wantSQL:        "SELECT * FROM users WHERE age > @p5 AND status = @p6",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 7,
+		},
+		{
+			name:           "non-sequential placeholders",
+			rawSQL:         "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0",
+			rawArgs:        []interface{}{123},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+		},
+		{
+			name:           "non-sequential placeholders with offset",
+			rawSQL:         "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0",
+			rawArgs:        []interface{}{123},
+			paramIndex:     4,
+			wantSQL:        "SELECT * FROM users WHERE id = @p4 OR parent_id = @p4",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 5,
+		},
+		{
+			name:           "mixed placeholder order",
+			rawSQL:         "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2",
+			rawArgs:        []interface{}{"john", 123, 25},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2",
+			wantArgs:       []interface{}{"john", 123, 25},
+			wantParamIndex: 3,
+		},
+		{
+			name:           "mixed placeholder order with offset",
+			rawSQL:         "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2",
+			rawArgs:        []interface{}{"john", 123, 25},
+			paramIndex:     10,
+			wantSQL:        "SELECT * FROM users WHERE id = @p11 AND name = @p10 AND age = @p12",
+			wantArgs:       []interface{}{"john", 123, 25},
+			wantParamIndex: 13,
+		},
+		{
+			name:           "complex query with joins",
+			rawSQL:         "SELECT u.id, p.name FROM users u JOIN profiles p ON u.id = p.user_id WHERE u.age > @p0 AND p.status = @p1",
+			rawArgs:        []interface{}{21, "verified"},
+			paramIndex:     3,
+			wantSQL:        "SELECT u.id, p.name FROM users u JOIN profiles p ON u.id = p.user_id WHERE u.age > @p3 AND p.status = @p4",
+			wantArgs:       []interface{}{21, "verified"},
+			wantParamIndex: 5,
+		},
+		{
+			name:           "no placeholders in query",
+			rawSQL:         "SELECT COUNT(*) FROM users",
+			rawArgs:        []interface{}{"dummy"},
+			paramIndex:     0,
+			wantSQL:        "SELECT COUNT(*) FROM users",
+			wantArgs:       []interface{}{"dummy"},
+			wantParamIndex: 1,
+		},
+		{
+			name:           "large parameter index",
+			rawSQL:         "SELECT * FROM users WHERE id = @p0 AND status = @p1",
+			rawArgs:        []interface{}{999, "active"},
+			paramIndex:     100,
+			wantSQL:        "SELECT * FROM users WHERE id = @p100 AND status = @p101",
+			wantArgs:       []interface{}{999, "active"},
+			wantParamIndex: 102,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paramIndex := tt.paramIndex
+			gotSQL, gotArgs := b.adjustRawQueryPlaceholders(tt.rawSQL, tt.rawArgs, &paramIndex)
+			if gotSQL != tt.wantSQL {
+				t.Errorf("adjustRawQueryPlaceholders() SQL = %v, want %v", gotSQL, tt.wantSQL)
+			}
+			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
+				t.Errorf("adjustRawQueryPlaceholders() args = %v, want %v", gotArgs, tt.wantArgs)
+			}
+			if paramIndex != tt.wantParamIndex {
+				t.Errorf("adjustRawQueryPlaceholders() paramIndex = %v, want %v", paramIndex, tt.wantParamIndex)
+			}
+		})
+	}
+}
+
+// TestSQLServerBuilder_buildSelectQueryWithParamIndex tests the buildSelectQueryWithParamIndex method for various scenarios with parameter index tracking.
+func TestSQLServerBuilder_buildSelectQueryWithParamIndex(t *testing.T) {
+	b := newSQLServerBuilder()
+	tests := []struct {
+		name           string
+		q              *SelectQuery
+		paramIndex     int
+		wantSQL        string
+		wantArgs       []interface{}
+		wantParamIndex int
+		wantErr        error
+	}{
+		{
+			name:           "nil query",
+			q:              nil,
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       nil,
+			wantParamIndex: 0,
+			wantErr:        ErrUnsupportedDialect,
+		},
+		{
+			name:           "raw SQL without args",
+			q:              &SelectQuery{Raw: "SELECT * FROM users"},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users",
+			wantArgs:       []interface{}(nil),
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with single placeholder",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p0", RawArgs: []interface{}{123}},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p0",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with placeholder and offset",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p0", RawArgs: []interface{}{123}},
+			paramIndex:     5,
+			wantSQL:        "SELECT * FROM users WHERE id = @p5",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 6,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with multiple placeholders",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE age > @p0 AND status = @p1", RawArgs: []interface{}{18, "active"}},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE age > @p0 AND status = @p1",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 2,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with multiple placeholders and offset",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE age > @p0 AND status = @p1", RawArgs: []interface{}{18, "active"}},
+			paramIndex:     3,
+			wantSQL:        "SELECT * FROM users WHERE age > @p3 AND status = @p4",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 5,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with non-sequential placeholders",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0", RawArgs: []interface{}{123}},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with non-sequential placeholders and offset",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p0 OR parent_id = @p0", RawArgs: []interface{}{123}},
+			paramIndex:     7,
+			wantSQL:        "SELECT * FROM users WHERE id = @p7 OR parent_id = @p7",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 8,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with mixed placeholder order",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2", RawArgs: []interface{}{"john", 123, 25}},
+			paramIndex:     0,
+			wantSQL:        "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2",
+			wantArgs:       []interface{}{"john", 123, 25},
+			wantParamIndex: 3,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with mixed placeholder order and offset",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p1 AND name = @p0 AND age = @p2", RawArgs: []interface{}{"john", 123, 25}},
+			paramIndex:     10,
+			wantSQL:        "SELECT * FROM users WHERE id = @p11 AND name = @p10 AND age = @p12",
+			wantArgs:       []interface{}{"john", 123, 25},
+			wantParamIndex: 13,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with complex query",
+			q:              &SelectQuery{Raw: "SELECT u.id, p.name FROM users u JOIN profiles p ON u.id = p.user_id WHERE u.age > @p0 AND p.status = @p1", RawArgs: []interface{}{21, "verified"}},
+			paramIndex:     5,
+			wantSQL:        "SELECT u.id, p.name FROM users u JOIN profiles p ON u.id = p.user_id WHERE u.age > @p5 AND p.status = @p6",
+			wantArgs:       []interface{}{21, "verified"},
+			wantParamIndex: 7,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL without placeholders but with args",
+			q:              &SelectQuery{Raw: "SELECT COUNT(*) FROM users", RawArgs: []interface{}{"dummy"}},
+			paramIndex:     0,
+			wantSQL:        "SELECT COUNT(*) FROM users",
+			wantArgs:       []interface{}{"dummy"},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "raw SQL with large parameter index",
+			q:              &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p0 AND status = @p1", RawArgs: []interface{}{999, "active"}},
+			paramIndex:     100,
+			wantSQL:        "SELECT * FROM users WHERE id = @p100 AND status = @p101",
+			wantArgs:       []interface{}{999, "active"},
+			wantParamIndex: 102,
+			wantErr:        nil,
+		},
+		{
+			name:           "non-raw simple query",
+			q:              &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}},
+			paramIndex:     0,
+			wantSQL:        "SELECT id FROM users",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "non-raw query with filter",
+			q:              &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 123}}},
+			paramIndex:     0,
+			wantSQL:        "SELECT id FROM users WHERE id = @p0",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "non-raw query with error",
+			q:              &SelectQuery{Fields: []Field{{Column: ""}}, Table: Table{Name: "users"}},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       nil,
+			wantParamIndex: 0,
+			wantErr:        ErrInvalidField,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paramIndex := tt.paramIndex
+			gotSQL, gotArgs, err := b.buildSelectQueryWithParamIndex(tt.q, &paramIndex)
+			if err != tt.wantErr {
+				t.Errorf("buildSelectQueryWithParamIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotSQL != tt.wantSQL {
+				t.Errorf("buildSelectQueryWithParamIndex() gotSQL = %v, want %v", gotSQL, tt.wantSQL)
+			}
+			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
+				t.Errorf("buildSelectQueryWithParamIndex() gotArgs = %v, want %v", gotArgs, tt.wantArgs)
+			}
+			if paramIndex != tt.wantParamIndex {
+				t.Errorf("buildSelectQueryWithParamIndex() paramIndex = %v, want %v", paramIndex, tt.wantParamIndex)
+			}
+		})
+	}
+}
+
 // Test_sqlServerBuilder_BuildDeleteQuery verifies the SQL Server builder's ability to generate DELETE queries correctly for various scenarios.
 func Test_sqlServerBuilder_BuildDeleteQuery(t *testing.T) {
 	b := newSQLServerBuilder()
@@ -52,7 +377,7 @@ func Test_sqlServerBuilder_BuildDeleteQuery(t *testing.T) {
 		{
 			name: "delete with filter",
 			// This test checks if the builder correctly adds a WHERE clause with a parameterized filter.
-			q:        &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "DELETE FROM users WHERE id = @p0",
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
@@ -187,7 +512,7 @@ func Test_sqlServerBuilder_BuildSelectQuery(t *testing.T) {
 		{
 			name: "select with where",
 			// This test checks if the builder adds a WHERE clause with a parameterized filter.
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "SELECT id FROM users WHERE id = @p0",
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
@@ -211,7 +536,7 @@ func Test_sqlServerBuilder_BuildSelectQuery(t *testing.T) {
 		{
 			name: "select with order by",
 			// This test checks if the builder adds an ORDER BY clause.
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: "DESC"}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionDescending}}},
 			wantSQL:  "SELECT id FROM users ORDER BY id DESC",
 			wantArgs: []interface{}{},
 			wantErr:  nil,
@@ -283,7 +608,7 @@ func Test_sqlServerBuilder_BuildSelectQuery(t *testing.T) {
 					Table: Table{Name: "orders"},
 					Filter: Filter{
 						Field:    Field{Table: "users", Column: "id"},
-						Operator: Operator("="),
+						Operator: OperatorEqual,
 						Value:    FilterValue{Table: "orders", Column: "user_id"},
 					},
 				}},
@@ -363,7 +688,7 @@ func Test_sqlServerBuilder_BuildUpdateQuery(t *testing.T) {
 		{
 			name: "valid update, with filter",
 			// This test checks if the builder generates a correct UPDATE statement with a WHERE clause.
-			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "UPDATE users SET id = @p0, name = @p1 WHERE id = @p2",
 			wantArgs: []interface{}{1, "foo", 1},
 			wantErr:  nil,
@@ -471,6 +796,473 @@ func Test_sqlServerBuilder_buildFields(t *testing.T) {
 	}
 }
 
+// TestSQLServerBuilder_buildFieldsWithParamIndex tests the buildFieldsWithParamIndex method for various field scenarios with parameter index tracking.
+func TestSQLServerBuilder_buildFieldsWithParamIndex(t *testing.T) {
+	b := newSQLServerBuilder()
+	tests := []struct {
+		name           string
+		fields         []Field
+		initialArgs    []interface{}
+		paramIndex     int
+		wantSQL        string
+		wantArgs       []interface{}
+		wantParamIndex int
+		wantErr        error
+	}{
+		{
+			name:           "empty fields",
+			fields:         []Field{},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "single column",
+			fields:         []Field{{Column: "id"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "id",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "multiple columns",
+			fields:         []Field{{Column: "id"}, {Column: "name"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "id, name",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "column with table prefix",
+			fields:         []Field{{Table: "users", Column: "id"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "users.id",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "column with alias",
+			fields:         []Field{{Column: "id", Alias: "user_id"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "id AS user_id",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "table.column with alias",
+			fields:         []Field{{Table: "users", Column: "id", Alias: "user_id"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "users.id AS user_id",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery field with alias",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "order_count"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p0) AS order_count",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery field with alias and parameter offset",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "order_count"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     5,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p5) AS order_count",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 6,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery field without alias",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT MAX(created_at) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{456}}}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT MAX(created_at) FROM orders WHERE user_id = @p0)",
+			wantArgs:       []interface{}{456},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name: "multiple subqueries with different parameters",
+			fields: []Field{
+				{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "order_count"},
+				{SelectQuery: &SelectQuery{Raw: "SELECT SUM(amount) FROM payments WHERE user_id = @p0", RawArgs: []interface{}{789}}, Alias: "total_paid"},
+			},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p0) AS order_count, (SELECT SUM(amount) FROM payments WHERE user_id = @p1) AS total_paid",
+			wantArgs:       []interface{}{123, 789},
+			wantParamIndex: 2,
+			wantErr:        nil,
+		},
+		{
+			name: "mixed fields with subqueries and columns",
+			fields: []Field{
+				{Column: "id"},
+				{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "order_count"},
+				{Table: "users", Column: "name"},
+			},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "id, (SELECT COUNT(*) FROM orders WHERE user_id = @p0) AS order_count, users.name",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with multiple placeholders",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0 AND status = @p1", RawArgs: []interface{}{123, "completed"}}, Alias: "completed_orders"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p0 AND status = @p1) AS completed_orders",
+			wantArgs:       []interface{}{123, "completed"},
+			wantParamIndex: 2,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with offset and multiple placeholders",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0 AND status = @p1", RawArgs: []interface{}{123, "completed"}}, Alias: "completed_orders"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     3,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p3 AND status = @p4) AS completed_orders",
+			wantArgs:       []interface{}{123, "completed"},
+			wantParamIndex: 5,
+			wantErr:        nil,
+		},
+		{
+			name:           "existing args with new subquery",
+			fields:         []Field{{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "order_count"}},
+			initialArgs:    []interface{}{"existing1", "existing2"},
+			paramIndex:     2,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p2) AS order_count",
+			wantArgs:       []interface{}{"existing1", "existing2", 123},
+			wantParamIndex: 3,
+			wantErr:        nil,
+		},
+		{
+			name:           "non-raw subquery field",
+			fields:         []Field{{SelectQuery: &SelectQuery{Fields: []Field{{Column: "COUNT(*)"}}, Table: Table{Name: "orders"}, Filter: &Filter{Field: Field{Column: "user_id"}, Operator: OperatorEqual, Value: FilterValue{Value: 123}}}, Alias: "order_count"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p0) AS order_count",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "invalid field (empty)",
+			fields:         []Field{{}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        ErrInvalidField,
+		},
+		{
+			name:           "subquery with error",
+			fields:         []Field{{SelectQuery: &SelectQuery{Fields: []Field{{Column: ""}}, Table: Table{Name: "orders"}}, Alias: "invalid"}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        ErrInvalidField,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := make([]interface{}, len(tt.initialArgs))
+			copy(args, tt.initialArgs)
+			paramIndex := tt.paramIndex
+			gotSQL, err := b.buildFieldsWithParamIndex(tt.fields, &args, &paramIndex)
+			if err != tt.wantErr {
+				t.Errorf("buildFieldsWithParamIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotSQL != tt.wantSQL {
+				t.Errorf("buildFieldsWithParamIndex() gotSQL = %v, want %v", gotSQL, tt.wantSQL)
+			}
+			if !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("buildFieldsWithParamIndex() args = %v, want %v", args, tt.wantArgs)
+			}
+			if paramIndex != tt.wantParamIndex {
+				t.Errorf("buildFieldsWithParamIndex() paramIndex = %v, want %v", paramIndex, tt.wantParamIndex)
+			}
+		})
+	}
+}
+
+// Test_sqlServerBuilder_buildTable verifies the builder's ability to generate SQL fragments for table references in various scenarios.
+func Test_sqlServerBuilder_buildTable(t *testing.T) {
+	b := newSQLServerBuilder()
+	// Create a dummy select query for subquery table test cases.
+	dummySelect := &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}}
+	tests := []struct {
+		name    string
+		table   Table
+		want    string
+		wantErr error
+	}{
+		{
+			name:    "simple table",
+			table:   Table{Name: "users"},
+			want:    "users",
+			wantErr: nil,
+		},
+		{
+			name:    "table with alias",
+			table:   Table{Name: "users", Alias: "u"},
+			want:    "users AS u",
+			wantErr: nil,
+		},
+		{
+			name:    "subquery table with alias",
+			table:   Table{SelectQuery: dummySelect, Alias: "sub"},
+			want:    "(SELECT id FROM users) AS sub",
+			wantErr: nil,
+		},
+		{
+			name:    "subquery table without alias",
+			table:   Table{SelectQuery: dummySelect},
+			want:    "(SELECT id FROM users)",
+			wantErr: nil,
+		},
+		{
+			name:    "error invalid table (empty)",
+			table:   Table{},
+			want:    "",
+			wantErr: ErrInvalidTable,
+		},
+		{
+			name:    "error subquery table returns error",
+			table:   Table{SelectQuery: &SelectQuery{}},
+			want:    "",
+			wantErr: ErrInvalidTable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prepare the arguments slice for the buildTable function.
+			args := []interface{}{}
+			// Call buildTable to generate the SQL fragment for the given table.
+			got, err := b.buildTable(tt.table, &args)
+			// Check if the generated SQL matches the expected value.
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+			// Check if the error matches the expected error for the test case.
+			if (err != nil && tt.wantErr == nil) || (err == nil && tt.wantErr != nil) || (err != nil && tt.wantErr != nil && err.Error() != tt.wantErr.Error()) {
+				t.Errorf("got err %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestSQLServerBuilder_buildTableWithParamIndex tests the buildTableWithParamIndex method for various table scenarios with parameter index tracking.
+func TestSQLServerBuilder_buildTableWithParamIndex(t *testing.T) {
+	b := newSQLServerBuilder()
+	tests := []struct {
+		name           string
+		table          Table
+		initialArgs    []interface{}
+		paramIndex     int
+		wantSQL        string
+		wantArgs       []interface{}
+		wantParamIndex int
+		wantErr        error
+	}{
+		{
+			name:           "empty table",
+			table:          Table{},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        ErrInvalidTable,
+		},
+		{
+			name:           "simple table name",
+			table:          Table{Name: "users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "users",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "table with alias",
+			table:          Table{Name: "users", Alias: "u"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "users AS u",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery table with alias",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "user_orders"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT * FROM orders WHERE user_id = @p0) AS user_orders",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery table with alias and parameter offset",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM orders WHERE user_id = @p0", RawArgs: []interface{}{123}}, Alias: "user_orders"},
+			initialArgs:    []interface{}{},
+			paramIndex:     5,
+			wantSQL:        "(SELECT * FROM orders WHERE user_id = @p5) AS user_orders",
+			wantArgs:       []interface{}{123},
+			wantParamIndex: 6,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery table without alias",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT id, name FROM users WHERE active = @p0", RawArgs: []interface{}{true}}},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT id, name FROM users WHERE active = @p0)",
+			wantArgs:       []interface{}{true},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with multiple placeholders",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM users WHERE age > @p0 AND status = @p1", RawArgs: []interface{}{18, "active"}}, Alias: "active_users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT * FROM users WHERE age > @p0 AND status = @p1) AS active_users",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 2,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with multiple placeholders and offset",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM users WHERE age > @p0 AND status = @p1", RawArgs: []interface{}{18, "active"}}, Alias: "active_users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     3,
+			wantSQL:        "(SELECT * FROM users WHERE age > @p3 AND status = @p4) AS active_users",
+			wantArgs:       []interface{}{18, "active"},
+			wantParamIndex: 5,
+			wantErr:        nil,
+		},
+		{
+			name:           "existing args with new subquery",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM orders WHERE user_id = @p0", RawArgs: []interface{}{456}}, Alias: "order_count"},
+			initialArgs:    []interface{}{"existing1", "existing2"},
+			paramIndex:     2,
+			wantSQL:        "(SELECT COUNT(*) FROM orders WHERE user_id = @p2) AS order_count",
+			wantArgs:       []interface{}{"existing1", "existing2", 456},
+			wantParamIndex: 3,
+			wantErr:        nil,
+		},
+		{
+			name:           "non-raw subquery table",
+			table:          Table{SelectQuery: &SelectQuery{Fields: []Field{{Column: "id"}, {Column: "name"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "active"}, Operator: OperatorEqual, Value: FilterValue{Value: true}}}, Alias: "active_users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT id, name FROM users WHERE active = @p0) AS active_users",
+			wantArgs:       []interface{}{true},
+			wantParamIndex: 0,
+			wantErr:        nil,
+		},
+		{
+			name:           "complex subquery with joins",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT u.id, COUNT(o.id) as order_count FROM users u LEFT JOIN orders o ON u.id = o.user_id WHERE u.created_at > @p0 GROUP BY u.id", RawArgs: []interface{}{"2023-01-01"}}, Alias: "user_stats"},
+			initialArgs:    []interface{}{},
+			paramIndex:     2,
+			wantSQL:        "(SELECT u.id, COUNT(o.id) as order_count FROM users u LEFT JOIN orders o ON u.id = o.user_id WHERE u.created_at > @p2 GROUP BY u.id) AS user_stats",
+			wantArgs:       []interface{}{"2023-01-01"},
+			wantParamIndex: 3,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery without placeholders but with args",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM users ORDER BY created_at DESC", RawArgs: []interface{}{"dummy"}}, Alias: "recent_users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT * FROM users ORDER BY created_at DESC) AS recent_users",
+			wantArgs:       []interface{}{"dummy"},
+			wantParamIndex: 1,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with mixed placeholder order",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT * FROM users WHERE id = @p1 AND email = @p0 AND status = @p2", RawArgs: []interface{}{"test@example.com", 123, "active"}}, Alias: "filtered_users"},
+			initialArgs:    []interface{}{},
+			paramIndex:     5,
+			wantSQL:        "(SELECT * FROM users WHERE id = @p6 AND email = @p5 AND status = @p7) AS filtered_users",
+			wantArgs:       []interface{}{"test@example.com", 123, "active"},
+			wantParamIndex: 8,
+			wantErr:        nil,
+		},
+		{
+			name:           "subquery with error",
+			table:          Table{SelectQuery: &SelectQuery{Fields: []Field{{Column: ""}}, Table: Table{Name: "users"}}, Alias: "invalid"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "",
+			wantArgs:       []interface{}{},
+			wantParamIndex: 0,
+			wantErr:        ErrInvalidField,
+		},
+		{
+			name:           "nested subquery table",
+			table:          Table{SelectQuery: &SelectQuery{Raw: "SELECT user_id FROM (SELECT user_id, COUNT(*) as cnt FROM orders WHERE amount > @p0 GROUP BY user_id) subq WHERE cnt > @p1", RawArgs: []interface{}{100.0, 5}}, Alias: "frequent_buyers"},
+			initialArgs:    []interface{}{},
+			paramIndex:     0,
+			wantSQL:        "(SELECT user_id FROM (SELECT user_id, COUNT(*) as cnt FROM orders WHERE amount > @p0 GROUP BY user_id) subq WHERE cnt > @p1) AS frequent_buyers",
+			wantArgs:       []interface{}{100.0, 5},
+			wantParamIndex: 2,
+			wantErr:        nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := make([]interface{}, len(tt.initialArgs))
+			copy(args, tt.initialArgs)
+			paramIndex := tt.paramIndex
+			gotSQL, err := b.buildTableWithParamIndex(tt.table, &args, &paramIndex)
+			if err != tt.wantErr {
+				t.Errorf("buildTableWithParamIndex() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotSQL != tt.wantSQL {
+				t.Errorf("buildTableWithParamIndex() gotSQL = %v, want %v", gotSQL, tt.wantSQL)
+			}
+			if !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("buildTableWithParamIndex() args = %v, want %v", args, tt.wantArgs)
+			}
+			if paramIndex != tt.wantParamIndex {
+				t.Errorf("buildTableWithParamIndex() paramIndex = %v, want %v", paramIndex, tt.wantParamIndex)
+			}
+		})
+	}
+}
+
 // Test_sqlServerBuilder_buildFieldForFilter verifies the builder's ability to generate correct SQL fragments for fields used in filters.
 func Test_sqlServerBuilder_buildFieldForFilter(t *testing.T) {
 	b := newSQLServerBuilder()
@@ -562,7 +1354,7 @@ func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 		{
 			name: "error in subfilter propagates to parent",
 			filter: &Filter{Logic: LogicAnd, Filters: []Filter{
-				{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 				{Field: Field{}},
 			}},
 			wantSQL:  "",
@@ -572,7 +1364,7 @@ func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 		{
 			name: "AND group with double space triggers normalization",
 			filter: &Filter{Logic: LogicAnd, Filters: []Filter{
-				{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 				{Field: Field{Column: "b"}, Operator: Operator("= "), Value: FilterValue{Value: 2}},
 			}},
 			wantSQL:  "a = @p0 AND b = @p1",
@@ -582,10 +1374,10 @@ func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 		{
 			name: "OR group with nested group (isRoot false)",
 			filter: &Filter{Logic: LogicOr, Filters: []Filter{
-				{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 				{Logic: LogicAnd, Filters: []Filter{
-					{Field: Field{Column: "b"}, Operator: Operator("="), Value: FilterValue{Value: 2}},
-					{Field: Field{Column: "c"}, Operator: Operator("="), Value: FilterValue{Value: 3}},
+					{Field: Field{Column: "b"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}},
+					{Field: Field{Column: "c"}, Operator: OperatorEqual, Value: FilterValue{Value: 3}},
 				}},
 			}},
 			wantSQL:  "a = @p0 OR (b = @p1 AND c = @p2)",
@@ -594,14 +1386,14 @@ func Test_sqlServerBuilder_buildFilter(t *testing.T) {
 		},
 		{
 			name:     "single filter with LIKE operator",
-			filter:   &Filter{Field: Field{Column: "name"}, Operator: Operator("LIKE"), Value: FilterValue{Value: "foo"}},
+			filter:   &Filter{Field: Field{Column: "name"}, Operator: OperatorLike, Value: FilterValue{Value: "foo"}},
 			wantSQL:  "name LIKE @p0",
 			wantArgs: []interface{}{"%foo%"},
 			wantErr:  false,
 		},
 		{
 			name:     "single filter with NOT LIKE operator",
-			filter:   &Filter{Field: Field{Column: "name"}, Operator: Operator("NOT LIKE"), Value: FilterValue{Value: "bar"}},
+			filter:   &Filter{Field: Field{Column: "name"}, Operator: OperatorNotLike, Value: FilterValue{Value: "bar"}},
 			wantSQL:  "name NOT LIKE @p0",
 			wantArgs: []interface{}{"%bar%"},
 			wantErr:  false,
@@ -709,7 +1501,7 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 		},
 		{
 			name:     "subquery value",
-			op:       Operator("="),
+			op:       OperatorEqual,
 			value:    FilterValue{SelectQuery: dummySelect},
 			wantSQL:  "(SELECT 1)",
 			wantArgs: []interface{}{},
@@ -717,7 +1509,7 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 		},
 		{
 			name:     "table-qualified column",
-			op:       Operator("="),
+			op:       OperatorEqual,
 			value:    FilterValue{Table: "users", Column: "id"},
 			wantSQL:  "users.id",
 			wantArgs: []interface{}{},
@@ -725,7 +1517,7 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 		},
 		{
 			name:     "plain column",
-			op:       Operator("="),
+			op:       OperatorEqual,
 			value:    FilterValue{Column: "name"},
 			wantSQL:  "name",
 			wantArgs: []interface{}{},
@@ -765,7 +1557,7 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 		},
 		{
 			name:     "standard parameterized value",
-			op:       Operator("="),
+			op:       OperatorEqual,
 			value:    FilterValue{Value: 42},
 			wantSQL:  "@p0",
 			wantArgs: []interface{}{42},
@@ -773,7 +1565,7 @@ func Test_sqlServerBuilder_buildFilterValue(t *testing.T) {
 		},
 		{
 			name:     "subquery value returns error",
-			op:       Operator("="),
+			op:       OperatorEqual,
 			value:    FilterValue{SelectQuery: &SelectQuery{}},
 			wantSQL:  "",
 			wantArgs: []interface{}{},
@@ -973,7 +1765,7 @@ func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 			joins: []Join{{
 				Type:   JoinTypeInner,
 				Table:  Table{Name: "roles"},
-				Filter: Filter{Field: Field{Column: "role_id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				Filter: Filter{Field: Field{Column: "role_id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			}},
 			want:    "INNER JOIN roles ON role_id = @p0",
 			wantErr: nil,
@@ -984,12 +1776,12 @@ func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 				{
 					Type:   JoinTypeInner,
 					Table:  Table{Name: "roles"},
-					Filter: Filter{Field: Field{Column: "role_id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+					Filter: Filter{Field: Field{Column: "role_id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 				},
 				{
 					Type:   JoinTypeLeft,
 					Table:  Table{Name: "permissions"},
-					Filter: Filter{Field: Field{Column: "perm_id"}, Operator: Operator("="), Value: FilterValue{Value: 2}},
+					Filter: Filter{Field: Field{Column: "perm_id"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}},
 				},
 			},
 			want:    "INNER JOIN roles ON role_id = @p0 LEFT JOIN permissions ON perm_id = @p1",
@@ -1000,7 +1792,7 @@ func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 			joins: []Join{{
 				Type:   JoinTypeInner,
 				Table:  Table{SelectQuery: dummySelect, Alias: "sub"},
-				Filter: Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				Filter: Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			}},
 			want:    "INNER JOIN (SELECT id FROM users) AS sub ON id = @p0",
 			wantErr: nil,
@@ -1010,7 +1802,7 @@ func Test_sqlServerBuilder_buildJoins(t *testing.T) {
 			joins: []Join{{
 				Type:   JoinTypeInner,
 				Table:  Table{},
-				Filter: Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+				Filter: Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			}},
 			want:    "",
 			wantErr: ErrInvalidTable,
@@ -1062,37 +1854,37 @@ func Test_sqlServerBuilder_buildOrderBy(t *testing.T) {
 		},
 		{
 			name:    "single sort ASC",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}},
 			want:    "id ASC",
 			wantErr: nil,
 		},
 		{
 			name:    "single sort DESC",
-			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			want:    "name DESC",
 			wantErr: nil,
 		},
 		{
 			name:    "multiple sorts",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}, {Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}, {Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			want:    "id ASC, name DESC",
 			wantErr: nil,
 		},
 		{
 			name:    "with table prefix",
-			sorts:   []Sort{{Field: Field{Table: "users", Column: "id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Table: "users", Column: "id"}, Direction: SortDirectionAscending}},
 			want:    "users.id ASC",
 			wantErr: nil,
 		},
 		{
 			name:    "with alias",
-			sorts:   []Sort{{Field: Field{Column: "id", Alias: "user_id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Column: "id", Alias: "user_id"}, Direction: SortDirectionAscending}},
 			want:    "id ASC",
 			wantErr: nil,
 		},
 		{
 			name:    "error invalid field",
-			sorts:   []Sort{{Field: Field{}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{}, Direction: SortDirectionAscending}},
 			want:    "",
 			wantErr: ErrInvalidOrderBy,
 		},
@@ -1107,72 +1899,6 @@ func Test_sqlServerBuilder_buildOrderBy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call buildOrderBy to generate the SQL ORDER BY clause for the given sorts.
 			got, err := b.buildOrderBy(tt.sorts)
-			// Check if the generated SQL matches the expected value.
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
-			}
-			// Check if the error matches the expected error for the test case.
-			if (err != nil && tt.wantErr == nil) || (err == nil && tt.wantErr != nil) || (err != nil && tt.wantErr != nil && err.Error() != tt.wantErr.Error()) {
-				t.Errorf("got err %v, want %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-// Test_sqlServerBuilder_buildTable verifies the builder's ability to generate SQL fragments for table references in various scenarios.
-func Test_sqlServerBuilder_buildTable(t *testing.T) {
-	b := newSQLServerBuilder()
-	// Create a dummy select query for subquery table test cases.
-	dummySelect := &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}}
-	tests := []struct {
-		name    string
-		table   Table
-		want    string
-		wantErr error
-	}{
-		{
-			name:    "simple table",
-			table:   Table{Name: "users"},
-			want:    "users",
-			wantErr: nil,
-		},
-		{
-			name:    "table with alias",
-			table:   Table{Name: "users", Alias: "u"},
-			want:    "users AS u",
-			wantErr: nil,
-		},
-		{
-			name:    "subquery table with alias",
-			table:   Table{SelectQuery: dummySelect, Alias: "sub"},
-			want:    "(SELECT id FROM users) AS sub",
-			wantErr: nil,
-		},
-		{
-			name:    "subquery table without alias",
-			table:   Table{SelectQuery: dummySelect},
-			want:    "(SELECT id FROM users)",
-			wantErr: nil,
-		},
-		{
-			name:    "error invalid table (empty)",
-			table:   Table{},
-			want:    "",
-			wantErr: ErrInvalidTable,
-		},
-		{
-			name:    "error subquery table returns error",
-			table:   Table{SelectQuery: &SelectQuery{}},
-			want:    "",
-			wantErr: ErrInvalidTable,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Prepare the arguments slice for the buildTable function.
-			args := []interface{}{}
-			// Call buildTable to generate the SQL fragment for the given table.
-			got, err := b.buildTable(tt.table, &args)
 			// Check if the generated SQL matches the expected value.
 			if got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)

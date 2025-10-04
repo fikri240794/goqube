@@ -55,7 +55,7 @@ func TestMySQLBuilder_BuildDeleteQuery(t *testing.T) {
 			name: "valid table, with filter",
 			// Setup a DeleteQuery with a filter on the "id" column.
 			setup: func() *DeleteQuery {
-				return &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}}
+				return &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}
 			},
 			wantSQL:  "DELETE FROM users WHERE id = ?",
 			wantArgs: []interface{}{1},
@@ -65,7 +65,7 @@ func TestMySQLBuilder_BuildDeleteQuery(t *testing.T) {
 			name: "filter returns error",
 			// Setup a DeleteQuery with an invalid filter (empty field) to trigger an error.
 			setup: func() *DeleteQuery {
-				return &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 1}}}
+				return &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}
 			},
 			wantSQL:  "",
 			wantArgs: nil,
@@ -205,7 +205,7 @@ func TestMySQLBuilder_BuildSelectQuery(t *testing.T) {
 		{
 			name: "error in joins",
 			// SelectQuery with an invalid join should return an error.
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Type: JoinType("inner"), Table: Table{}, Filter: Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Type: JoinTypeInner, Table: Table{}, Filter: Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -213,7 +213,7 @@ func TestMySQLBuilder_BuildSelectQuery(t *testing.T) {
 		{
 			name: "error in filter",
 			// SelectQuery with an invalid filter should return an error.
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -245,8 +245,8 @@ func TestMySQLBuilder_BuildSelectQuery(t *testing.T) {
 		{
 			name: "full valid select",
 			// Full SelectQuery with joins, filter, group by, order by, limit, and offset.
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Type: JoinType("inner"), Table: Table{Name: "roles"}, Filter: Filter{Field: Field{Column: "role_id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}}}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 2}}, GroupByFields: []Field{{Column: "id"}}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}}, Take: 1, Skip: 2},
-			wantSQL:  "SELECT id FROM users INNER roles ON role_id = ? WHERE id = ? GROUP BY id ORDER BY id ASC LIMIT ? OFFSET ?",
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Type: JoinTypeInner, Table: Table{Name: "roles"}, Filter: Filter{Field: Field{Column: "role_id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}}, GroupByFields: []Field{{Column: "id"}}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}}, Take: 1, Skip: 2},
+			wantSQL:  "SELECT id FROM users INNER JOIN roles ON role_id = ? WHERE id = ? GROUP BY id ORDER BY id ASC LIMIT ? OFFSET ?",
 			wantArgs: []interface{}{1, 2, int64(1), int64(2)},
 			wantErr:  false,
 		},
@@ -311,7 +311,7 @@ func TestMySQLBuilder_BuildUpdateQuery(t *testing.T) {
 		{
 			name: "valid update, with filter",
 			// Valid UpdateQuery with a filter on the "id" column.
-			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "bar"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "bar"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "UPDATE users SET name = ? WHERE id = ?",
 			wantArgs: []interface{}{"bar", 1},
 			wantErr:  false,
@@ -319,7 +319,7 @@ func TestMySQLBuilder_BuildUpdateQuery(t *testing.T) {
 		{
 			name: "error in filter",
 			// UpdateQuery with an invalid filter (empty field) should return an error.
-			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "baz"}, Filter: &Filter{Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "baz"}, Filter: &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -436,7 +436,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "simple equality",
 			// Filter with a simple equality condition should generate correct SQL and arguments.
-			filter:   &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+			filter:   &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			wantSQL:  "id = ?",
 			wantArgs: []interface{}{1},
 			wantErr:  false,
@@ -444,7 +444,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "AND group, isRoot true",
 			// Group filter with AND logic at the root level.
-			filter:   &Filter{Logic: LogicAnd, Filters: []Filter{{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}}, {Field: Field{Column: "b"}, Operator: Operator("="), Value: FilterValue{Value: 2}}}},
+			filter:   &Filter{Logic: LogicAnd, Filters: []Filter{{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}, {Field: Field{Column: "b"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}}}},
 			wantSQL:  "a = ? AND b = ?",
 			wantArgs: []interface{}{1, 2},
 			wantErr:  false,
@@ -452,7 +452,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "OR group, isRoot false",
 			// Group filter with OR logic, not at the root level, should be wrapped in parentheses.
-			filter:   &Filter{Logic: LogicOr, Filters: []Filter{{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}}, {Field: Field{Column: "b"}, Operator: Operator("="), Value: FilterValue{Value: 2}}}},
+			filter:   &Filter{Logic: LogicOr, Filters: []Filter{{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}, {Field: Field{Column: "b"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}}}},
 			wantSQL:  "(a = ? OR b = ?)",
 			wantArgs: []interface{}{1, 2},
 			wantErr:  false,
@@ -460,7 +460,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "error in buildFieldForFilter",
 			// Filter with an invalid field should return an error.
-			filter:   &Filter{Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+			filter:   &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -468,7 +468,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "error in buildFilterValue",
 			// Filter with an invalid value for the IN operator should return an error.
-			filter:   &Filter{Field: Field{Column: "id"}, Operator: Operator("IN"), Value: FilterValue{Value: 123}},
+			filter:   &Filter{Field: Field{Column: "id"}, Operator: OperatorIn, Value: FilterValue{Value: 123}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -476,7 +476,7 @@ func TestMySQLBuilder_buildFilter(t *testing.T) {
 		{
 			name: "group with sub-filter error",
 			// Group filter with a sub-filter that returns an error should propagate the error.
-			filter:   &Filter{Logic: LogicAnd, Filters: []Filter{{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}}, {Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 2}}}},
+			filter:   &Filter{Logic: LogicAnd, Filters: []Filter{{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}, {Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 2}}}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
@@ -578,25 +578,25 @@ func TestMySQLBuilder_buildJoins(t *testing.T) {
 		},
 		{
 			name:    "single join",
-			joins:   []Join{{Type: JoinType("INNER JOIN"), Table: Table{Name: "roles"}, Filter: Filter{Field: Field{Column: "id"}}}},
+			joins:   []Join{{Type: JoinType(JoinTypeInner), Table: Table{Name: "roles"}, Filter: Filter{Field: Field{Column: "id"}}}},
 			wantSQL: "INNER JOIN roles ON id",
 			wantErr: false,
 		},
 		{
 			name:    "multiple joins",
-			joins:   []Join{{Type: JoinType("LEFT JOIN"), Table: Table{Name: "a"}, Filter: Filter{Field: Field{Column: "x"}}}, {Type: JoinType("RIGHT JOIN"), Table: Table{Name: "b"}, Filter: Filter{Field: Field{Column: "y"}}}},
+			joins:   []Join{{Type: JoinType(JoinTypeLeft), Table: Table{Name: "a"}, Filter: Filter{Field: Field{Column: "x"}}}, {Type: JoinType(JoinTypeRight), Table: Table{Name: "b"}, Filter: Filter{Field: Field{Column: "y"}}}},
 			wantSQL: "LEFT JOIN a ON x RIGHT JOIN b ON y",
 			wantErr: false,
 		},
 		{
 			name:    "error in join table",
-			joins:   []Join{{Type: JoinType("INNER JOIN"), Table: Table{}, Filter: Filter{Field: Field{Column: "id"}}}},
+			joins:   []Join{{Type: JoinType(JoinTypeInner), Table: Table{}, Filter: Filter{Field: Field{Column: "id"}}}},
 			wantSQL: "",
 			wantErr: true,
 		},
 		{
 			name:    "error in join filter",
-			joins:   []Join{{Type: JoinType("INNER JOIN"), Table: Table{Name: "roles"}, Filter: Filter{Field: Field{}}}},
+			joins:   []Join{{Type: JoinType(JoinTypeInner), Table: Table{Name: "roles"}, Filter: Filter{Field: Field{}}}},
 			wantSQL: "",
 			wantErr: true,
 		},
@@ -643,25 +643,25 @@ func TestMySQLBuilder_buildOrderBy(t *testing.T) {
 		},
 		{
 			name:    "single sort asc",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}},
 			wantSQL: "id ASC",
 			wantErr: false,
 		},
 		{
 			name:    "single sort desc",
-			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			wantSQL: "name DESC",
 			wantErr: false,
 		},
 		{
 			name:    "multiple sorts",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}, {Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}, {Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			wantSQL: "id ASC, name DESC",
 			wantErr: false,
 		},
 		{
 			name:    "error in sort field",
-			sorts:   []Sort{{Field: Field{}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{}, Direction: SortDirectionAscending}},
 			wantSQL: "",
 			wantErr: true,
 		},

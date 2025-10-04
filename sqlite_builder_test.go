@@ -51,7 +51,7 @@ func Test_sqliteBuilder_BuildDeleteQuery(t *testing.T) {
 		},
 		{
 			name:     "delete with filter",
-			q:        &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &DeleteQuery{Table: "users", Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "DELETE FROM users WHERE id = ?",
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
@@ -173,7 +173,7 @@ func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 		},
 		{
 			name:     "select with join",
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Table: Table{Name: "roles"}, Type: "INNER JOIN", Filter: Filter{Field: Field{Column: "users.role_id"}, Operator: Operator("="), Value: FilterValue{Column: "roles.id"}}}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Joins: []Join{{Table: Table{Name: "roles"}, Type: JoinTypeInner, Filter: Filter{Field: Field{Column: "users.role_id"}, Operator: OperatorEqual, Value: FilterValue{Column: "roles.id"}}}}},
 			wantSQL:  "SELECT id FROM users INNER JOIN roles ON users.role_id = roles.id",
 			wantArgs: []interface{}{},
 			wantErr:  nil,
@@ -201,7 +201,7 @@ func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 		},
 		{
 			name:     "error from buildFilter",
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: ""}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: ""}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  ErrInvalidFilter,
@@ -229,7 +229,7 @@ func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 		},
 		{
 			name:     "select with where",
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "SELECT id FROM users WHERE id = ?",
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
@@ -243,7 +243,7 @@ func Test_sqliteBuilder_BuildSelectQuery(t *testing.T) {
 		},
 		{
 			name:     "select with order by",
-			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: "DESC"}}},
+			q:        &SelectQuery{Fields: []Field{{Column: "id"}}, Table: Table{Name: "users"}, Sorts: []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionDescending}}},
 			wantSQL:  "SELECT id FROM users ORDER BY id DESC",
 			wantArgs: []interface{}{},
 			wantErr:  nil,
@@ -322,7 +322,7 @@ func Test_sqliteBuilder_BuildUpdateQuery(t *testing.T) {
 		},
 		{
 			name:     "update with filter",
-			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "foo"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}},
+			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "foo"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "UPDATE users SET name = ? WHERE id = ?",
 			wantArgs: []interface{}{"foo", 1},
 			wantErr:  nil,
@@ -419,14 +419,14 @@ func Test_sqliteBuilder_buildFilter(t *testing.T) {
 		},
 		{
 			name:     "invalid filter (empty field)",
-			filter:   &Filter{Field: Field{Column: ""}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+			filter:   &Filter{Field: Field{Column: ""}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			want:     "",
 			wantArgs: []interface{}{},
 			wantErr:  ErrInvalidFilter,
 		},
 		{
 			name:     "simple filter",
-			filter:   &Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
+			filter:   &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
 			want:     "id = ?",
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
@@ -528,7 +528,7 @@ func Test_sqliteBuilder_buildJoins(t *testing.T) {
 		},
 		{
 			name:     "simple join",
-			joins:    []Join{{Table: Table{Name: "roles"}, Type: "INNER JOIN", Filter: Filter{Field: Field{Column: "users.role_id"}, Operator: Operator("="), Value: FilterValue{Column: "roles.id"}}}},
+			joins:    []Join{{Table: Table{Name: "roles"}, Type: JoinTypeInner, Filter: Filter{Field: Field{Column: "users.role_id"}, Operator: OperatorEqual, Value: FilterValue{Column: "roles.id"}}}},
 			want:     "INNER JOIN roles ON users.role_id = roles.id",
 			wantArgs: []interface{}{},
 			wantErr:  nil,
@@ -572,19 +572,19 @@ func Test_sqliteBuilder_buildOrderBy(t *testing.T) {
 		},
 		{
 			name:    "single sort asc",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}},
 			want:    "id ASC",
 			wantErr: nil,
 		},
 		{
 			name:    "single sort desc",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionDescending}},
 			want:    "id DESC",
 			wantErr: nil,
 		},
 		{
 			name:    "multiple sorts",
-			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: "ASC"}, {Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionAscending}, {Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			want:    "id ASC, name DESC",
 			wantErr: nil,
 		},

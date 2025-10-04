@@ -117,7 +117,7 @@ func (b *dynamicQueryBuilder) buildFilter(f *Filter, args *[]interface{}, isRoot
 	if err != nil {
 		return "", err
 	}
-	valueStr, err := b.buildFilterValue(f.Operator, f.Value, args)
+	valueStr, err := b.buildFilterValueWithSelectQuery(f.Operator, f.Value, args, buildSelectQuery)
 	if err != nil {
 		return "", err
 	}
@@ -162,6 +162,22 @@ func (b *dynamicQueryBuilder) buildFilterValue(op Operator, v FilterValue, args 
 	// Default case: single parameter placeholder
 	*args = append(*args, v.Value)
 	return "?", nil
+}
+
+// buildFilterValueWithSelectQuery returns the SQL representation of a filter value with SelectQuery support
+func (b *dynamicQueryBuilder) buildFilterValueWithSelectQuery(op Operator, v FilterValue, args *[]interface{}, buildSelectQuery func(*SelectQuery) (string, []interface{}, error)) (string, error) {
+	// Handle subquery first
+	if v.SelectQuery != nil {
+		sub, subArgs, err := buildSelectQuery(v.SelectQuery)
+		if err != nil {
+			return "", err
+		}
+		*args = append(*args, subArgs...)
+		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+	}
+
+	// For non-subquery cases, delegate to regular buildFilterValue
+	return b.buildFilterValue(op, v, args)
 }
 
 // buildGroupBy returns the SQL representation of a GROUP BY clause from a slice of fields.

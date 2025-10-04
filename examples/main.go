@@ -86,7 +86,7 @@ func simpleSelect(dialect goqube.Dialect) {
 			Value:    goqube.FilterValue{Value: true},
 		},
 		Sorts: []goqube.Sort{
-			{Field: goqube.Field{Column: "created_at"}, Direction: "DESC"},
+			{Field: goqube.Field{Column: "created_at"}, Direction: goqube.SortDirectionDescending},
 		},
 		Take: 10,
 		Skip: 5,
@@ -104,17 +104,78 @@ func simpleSelect(dialect goqube.Dialect) {
 
 // Complex SELECT with JOINs example
 func complexSelect(dialect goqube.Dialect) {
+	// Define dialect-specific raw queries and placeholders
+	var (
+		commentCountQuery    string
+		userFilterQuery      string
+		postFilterQuery      string
+		scoreComparisonQuery string
+		args1                []interface{}
+		args2                []interface{}
+		args3                []interface{}
+		args4                []interface{}
+	)
+
+	switch dialect {
+	case goqube.DialectMySQL, goqube.DialectSQLite:
+		commentCountQuery = "SELECT COUNT(*) FROM comments WHERE post_id = p.id AND status = ?"
+		userFilterQuery = "SELECT * FROM users WHERE registration_date > ? AND country = ?"
+		postFilterQuery = "SELECT * FROM posts WHERE created_at > ? AND status = ?"
+		scoreComparisonQuery = "SELECT AVG(score) FROM user_scores WHERE exam_date > ?"
+		args1 = []interface{}{"approved"}
+		args2 = []interface{}{"2023-01-01", "ID"}
+		args3 = []interface{}{"2023-06-01", "published"}
+		args4 = []interface{}{"2023-01-01"}
+	case goqube.DialectPostgres:
+		commentCountQuery = "SELECT COUNT(*) FROM comments WHERE post_id = p.id AND status = $1"
+		userFilterQuery = "SELECT * FROM users WHERE registration_date > $1 AND country = $2"
+		postFilterQuery = "SELECT * FROM posts WHERE created_at > $1 AND status = $2"
+		scoreComparisonQuery = "SELECT AVG(score) FROM user_scores WHERE exam_date > $1"
+		args1 = []interface{}{"approved"}
+		args2 = []interface{}{"2023-01-01", "ID"}
+		args3 = []interface{}{"2023-06-01", "published"}
+		args4 = []interface{}{"2023-01-01"}
+	case goqube.DialectSQLServer:
+		commentCountQuery = "SELECT COUNT(*) FROM comments WHERE post_id = p.id AND status = @p0"
+		userFilterQuery = "SELECT * FROM users WHERE registration_date > @p0 AND country = @p1"
+		postFilterQuery = "SELECT * FROM posts WHERE created_at > @p0 AND status = @p1"
+		scoreComparisonQuery = "SELECT AVG(score) FROM user_scores WHERE exam_date > @p0"
+		args1 = []interface{}{"approved"}
+		args2 = []interface{}{"2023-01-01", "ID"}
+		args3 = []interface{}{"2023-06-01", "published"}
+		args4 = []interface{}{"2023-01-01"}
+	}
+
 	query := &goqube.SelectQuery{
 		Fields: []goqube.Field{
 			{Table: "u", Column: "name"},
 			{Table: "p", Column: "title"},
 			{Table: "c", Column: "name", Alias: "category_name"},
+			{
+				SelectQuery: &goqube.SelectQuery{
+					Raw:     commentCountQuery,
+					RawArgs: args1,
+				},
+				Alias: "comment_count",
+			},
 		},
-		Table: goqube.Table{Name: "users", Alias: "u"},
+		Table: goqube.Table{
+			SelectQuery: &goqube.SelectQuery{
+				Raw:     userFilterQuery,
+				RawArgs: args2,
+			},
+			Alias: "u",
+		},
 		Joins: []goqube.Join{
 			{
-				Type:  goqube.JoinTypeLeft,
-				Table: goqube.Table{Name: "posts", Alias: "p"},
+				Type: goqube.JoinTypeLeft,
+				Table: goqube.Table{
+					SelectQuery: &goqube.SelectQuery{
+						Raw:     postFilterQuery,
+						RawArgs: args3,
+					},
+					Alias: "p",
+				},
 				Filter: goqube.Filter{
 					Field:    goqube.Field{Table: "u", Column: "id"},
 					Operator: goqube.OperatorEqual,
@@ -142,6 +203,16 @@ func complexSelect(dialect goqube.Dialect) {
 				{
 					Field:    goqube.Field{Table: "p", Column: "published_at"},
 					Operator: goqube.OperatorIsNotNull,
+				},
+				{
+					Field:    goqube.Field{Table: "u", Column: "score"},
+					Operator: goqube.OperatorGreaterThan,
+					Value: goqube.FilterValue{
+						SelectQuery: &goqube.SelectQuery{
+							Raw:     scoreComparisonQuery,
+							RawArgs: args4,
+						},
+					},
 				},
 			},
 		},

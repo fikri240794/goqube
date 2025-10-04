@@ -50,7 +50,7 @@ q := &SelectQuery{
         Operator: OperatorEqual,
         Value:    FilterValue{Value: "active"},
     },
-    Sorts: []Sort{{Field: Field{Column: "id"}, Direction: "DESC"}},
+    Sorts: []Sort{{Field: Field{Column: "id"}, Direction: SortDirectionDescending}},
     Take:  10,
     Skip:  0,
 }

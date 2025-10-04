@@ -3,6 +3,7 @@ package goqube
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
@@ -14,6 +15,47 @@ type sqlServerBuilder struct {
 // newSQLServerBuilder creates a new sqlServerBuilder with SQL Server-style placeholders (e.g., @p1, @p2).
 func newSQLServerBuilder() *sqlServerBuilder {
 	return &sqlServerBuilder{dynamicQueryBuilder{placeholderFormat: "@p%d"}}
+}
+
+// adjustRawQueryPlaceholders adjusts placeholders in raw SQL to match the current parameter index for SQL Server
+func (b *sqlServerBuilder) adjustRawQueryPlaceholders(rawSQL string, rawArgs []interface{}, paramIndex *int) (string, []interface{}) {
+	if rawSQL == "" || len(rawArgs) == 0 {
+		return rawSQL, rawArgs
+	}
+
+	// Track the starting parameter index for this raw query
+	startIndex := *paramIndex
+
+	// Use regex to find all @p0, @p1, etc. placeholders and adjust them
+	re := regexp.MustCompile(`@p(\d+)`)
+	adjustedSQL := re.ReplaceAllStringFunc(rawSQL, func(match string) string {
+		// Extract the original placeholder number
+		var originalIndex int
+		fmt.Sscanf(match[2:], "%d", &originalIndex)
+		// Map @p0 -> @p{startIndex}, @p1 -> @p{startIndex+1}, etc.
+		return fmt.Sprintf("@p%d", startIndex+originalIndex)
+	})
+
+	// Advance the parameter index by the number of arguments
+	*paramIndex += len(rawArgs)
+
+	return adjustedSQL, rawArgs
+}
+
+// buildSelectQueryWithParamIndex builds a SelectQuery with parameter index awareness for subqueries
+func (b *sqlServerBuilder) buildSelectQueryWithParamIndex(q *SelectQuery, paramIndex *int) (string, []interface{}, error) {
+	if q == nil {
+		return "", nil, ErrUnsupportedDialect
+	}
+
+	// Handle raw SQL queries with parameter index adjustment
+	if q.Raw != "" {
+		adjustedSQL, adjustedArgs := b.adjustRawQueryPlaceholders(q.Raw, q.RawArgs, paramIndex)
+		return adjustedSQL, adjustedArgs, nil
+	}
+
+	// For non-raw queries, delegate to the standard BuildSelectQuery
+	return b.BuildSelectQuery(q)
 }
 
 // BuildDeleteQuery builds a SQL DELETE statement and its arguments for SQL Server.
@@ -45,7 +87,7 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 
 	// Early return for raw SQL queries to avoid unnecessary processing
 	if q.Raw != "" {
-		return q.Raw, nil, nil
+		return q.Raw, q.RawArgs, nil
 	}
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
@@ -53,21 +95,21 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 	var sb strings.Builder
 	sb.WriteString("SELECT ")
 
-	fields, err := b.buildFields(q.Fields, &args)
+	// Initialize parameter index for SQL Server's @p0, @p1 placeholders
+	paramIndex := 0
+
+	fields, err := b.buildFieldsWithParamIndex(q.Fields, &args, &paramIndex)
 	if err != nil {
 		return "", nil, err
 	}
 	sb.WriteString(fields)
 
-	table, err := b.buildTable(q.Table, &args)
+	table, err := b.buildTableWithParamIndex(q.Table, &args, &paramIndex)
 	if err != nil {
 		return "", nil, err
 	}
 	sb.WriteString(" FROM ")
 	sb.WriteString(table)
-
-	// Initialize parameter index for SQL Server's @p1, @p2 placeholders
-	paramIndex := 0
 
 	// Process JOINs only if they exist
 	if len(q.Joins) > 0 {
@@ -154,6 +196,25 @@ func (b *sqlServerBuilder) buildFields(fields []Field, args *[]interface{}) (str
 	return b.dynamicQueryBuilder.buildFields(fields, args, b.BuildSelectQuery)
 }
 
+// buildFieldsWithParamIndex returns the SQL representation of fields with parameter index awareness for SQL Server.
+func (b *sqlServerBuilder) buildFieldsWithParamIndex(fields []Field, args *[]interface{}, paramIndex *int) (string, error) {
+	return b.dynamicQueryBuilder.buildFields(fields, args, func(sq *SelectQuery) (string, []interface{}, error) {
+		return b.buildSelectQueryWithParamIndex(sq, paramIndex)
+	})
+}
+
+// buildTable returns the SQL representation of a table or subquery for SQL Server.
+func (b *sqlServerBuilder) buildTable(t Table, args *[]interface{}) (string, error) {
+	return b.dynamicQueryBuilder.buildTable(t, args, b.BuildSelectQuery)
+}
+
+// buildTableWithParamIndex returns the SQL representation of a table or subquery with parameter index awareness for SQL Server.
+func (b *sqlServerBuilder) buildTableWithParamIndex(t Table, args *[]interface{}, paramIndex *int) (string, error) {
+	return b.dynamicQueryBuilder.buildTable(t, args, func(sq *SelectQuery) (string, []interface{}, error) {
+		return b.buildSelectQueryWithParamIndex(sq, paramIndex)
+	})
+}
+
 // buildFieldForFilter returns the SQL representation of a field for use in filter conditions in SQL Server.
 func (b *sqlServerBuilder) buildFieldForFilter(f Field) (string, error) {
 	if f.SelectQuery != nil {
@@ -238,7 +299,8 @@ func (b *sqlServerBuilder) buildFilterValue(op Operator, v FilterValue, args *[]
 	}
 
 	if v.SelectQuery != nil {
-		sub, subArgs, err := b.BuildSelectQuery(v.SelectQuery)
+		// Use parameter index aware version for subqueries
+		sub, subArgs, err := b.buildSelectQueryWithParamIndex(v.SelectQuery, paramIndex)
 		if err != nil {
 			return "", err
 		}
@@ -311,7 +373,9 @@ func (b *sqlServerBuilder) buildJoins(joins []Join, args *[]interface{}, paramIn
 	return b.dynamicQueryBuilder.buildJoins(
 		joins,
 		args,
-		b.BuildSelectQuery,
+		func(sq *SelectQuery) (string, []interface{}, error) {
+			return b.buildSelectQueryWithParamIndex(sq, paramIndex)
+		},
 		func(f *Filter, args *[]interface{}) (string, error) {
 			return b.buildFilter(f, args, paramIndex, true)
 		},
@@ -321,11 +385,6 @@ func (b *sqlServerBuilder) buildJoins(joins []Join, args *[]interface{}, paramIn
 // buildOrderBy returns the SQL representation of the ORDER BY clause for SQL Server.
 func (b *sqlServerBuilder) buildOrderBy(sorts []Sort) (string, error) {
 	return b.dynamicQueryBuilder.buildOrderBy(sorts)
-}
-
-// buildTable returns the SQL representation of a table or subquery for SQL Server.
-func (b *sqlServerBuilder) buildTable(t Table, args *[]interface{}) (string, error) {
-	return b.dynamicQueryBuilder.buildTable(t, args, b.BuildSelectQuery)
 }
 
 // nextPlaceholder returns the next parameter placeholder for SQL Server (e.g., @p1, @p2).

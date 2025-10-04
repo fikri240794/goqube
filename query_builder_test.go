@@ -269,7 +269,7 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 			args: args{
 				f: &Filter{
 					Field:    Field{Column: "age"},
-					Operator: Operator("="),
+					Operator: OperatorEqual,
 					Value:    FilterValue{Value: 30},
 				},
 				args:             &[]interface{}{},
@@ -286,8 +286,8 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 				f: &Filter{
 					Logic: "AND",
 					Filters: []Filter{
-						{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
-						{Field: Field{Column: "b"}, Operator: Operator("<"), Value: FilterValue{Value: 2}},
+						{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+						{Field: Field{Column: "b"}, Operator: OperatorLessThan, Value: FilterValue{Value: 2}},
 					},
 				},
 				args:             &[]interface{}{},
@@ -304,8 +304,8 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 				f: &Filter{
 					Logic: "OR",
 					Filters: []Filter{
-						{Field: Field{Column: "x"}, Operator: Operator(">"), Value: FilterValue{Value: 10}},
-						{Field: Field{Column: "y"}, Operator: Operator("<"), Value: FilterValue{Value: 5}},
+						{Field: Field{Column: "x"}, Operator: OperatorGreaterThan, Value: FilterValue{Value: 10}},
+						{Field: Field{Column: "y"}, Operator: OperatorLessThan, Value: FilterValue{Value: 5}},
 					},
 				},
 				args:             &[]interface{}{},
@@ -321,7 +321,7 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 			args: args{
 				f: &Filter{
 					Field:    Field{},
-					Operator: Operator("="),
+					Operator: OperatorEqual,
 					Value:    FilterValue{Value: 1},
 				},
 				args:             &[]interface{}{},
@@ -337,7 +337,7 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 			args: args{
 				f: &Filter{
 					Field:    Field{Column: "z"},
-					Operator: Operator("IN"),
+					Operator: OperatorIn,
 					Value:    FilterValue{Value: 123},
 				},
 				args:             &[]interface{}{},
@@ -354,8 +354,8 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 				f: &Filter{
 					Logic: "AND",
 					Filters: []Filter{
-						{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
-						{Field: Field{}, Operator: Operator("="), Value: FilterValue{Value: 2}},
+						{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+						{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 2}},
 					},
 				},
 				args:             &[]interface{}{},
@@ -372,11 +372,11 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 				f: &Filter{
 					Logic: "AND",
 					Filters: []Filter{
-						{Field: Field{Column: "a"}, Operator: Operator("="), Value: FilterValue{Value: 1}},
-						{Field: Field{Column: "b"}, Operator: Operator("="), Value: FilterValue{Value: 2}},
-						{Field: Field{Column: "c"}, Operator: Operator("="), Value: FilterValue{Value: 3}},
-						{Field: Field{Column: "d"}, Operator: Operator("="), Value: FilterValue{Value: 4}},
-						{Field: Field{Column: "e"}, Operator: Operator("="), Value: FilterValue{Value: 5}},
+						{Field: Field{Column: "a"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+						{Field: Field{Column: "b"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}},
+						{Field: Field{Column: "c"}, Operator: OperatorEqual, Value: FilterValue{Value: 3}},
+						{Field: Field{Column: "d"}, Operator: OperatorEqual, Value: FilterValue{Value: 4}},
+						{Field: Field{Column: "e"}, Operator: OperatorEqual, Value: FilterValue{Value: 5}},
 					},
 				},
 				args:             &[]interface{}{},
@@ -393,9 +393,9 @@ func TestDynamicQueryBuilder_buildFilter(t *testing.T) {
 				f: &Filter{
 					Logic: "AND",
 					Filters: []Filter{
-						{Field: Field{Column: "name"}, Operator: Operator("IS NULL"), Value: FilterValue{}},
-						{Field: Field{Column: "email"}, Operator: Operator("IS NOT NULL"), Value: FilterValue{}},
-						{Field: Field{Column: "status"}, Operator: Operator("IS NULL"), Value: FilterValue{}},
+						{Field: Field{Column: "name"}, Operator: OperatorIsNull, Value: FilterValue{}},
+						{Field: Field{Column: "email"}, Operator: OperatorIsNotNull, Value: FilterValue{}},
+						{Field: Field{Column: "status"}, Operator: OperatorIsNull, Value: FilterValue{}},
 					},
 				},
 				args:   &[]interface{}{},
@@ -449,7 +449,7 @@ func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 		{
 			name: "table and column",
 			args: args{
-				op:   Operator("="),
+				op:   OperatorEqual,
 				v:    FilterValue{Table: "users", Column: "id"},
 				args: &[]interface{}{},
 			},
@@ -460,7 +460,7 @@ func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 		{
 			name: "column only",
 			args: args{
-				op:   Operator("="),
+				op:   OperatorEqual,
 				v:    FilterValue{Column: "name"},
 				args: &[]interface{}{},
 			},
@@ -537,7 +537,7 @@ func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 		{
 			name: "default case (single value)",
 			args: args{
-				op:   Operator("<"),
+				op:   OperatorLessThan,
 				v:    FilterValue{Value: 42},
 				args: &[]interface{}{},
 			},
@@ -559,6 +559,181 @@ func TestDynamicQueryBuilder_buildFilterValue(t *testing.T) {
 			// Compare the generated SQL placeholder(s) with the expected value.
 			if got != tt.want {
 				t.Errorf("buildFilterValue() = %v, want %v", got, tt.want)
+			}
+			// Ensure the collected arguments match the expected arguments.
+			if tt.args.args != nil && !reflect.DeepEqual(*tt.args.args, tt.wantArgs) {
+				t.Errorf("args = %v, want %v", *tt.args.args, tt.wantArgs)
+			}
+		})
+	}
+}
+
+// TestDynamicQueryBuilder_buildFilterValueWithSelectQuery tests the buildFilterValueWithSelectQuery method for various operator and value scenarios with SelectQuery support.
+func TestDynamicQueryBuilder_buildFilterValueWithSelectQuery(t *testing.T) {
+	type args struct {
+		op               Operator
+		v                FilterValue
+		args             *[]interface{}
+		buildSelectQuery func(*SelectQuery) (string, []interface{}, error)
+	}
+	tests := []struct {
+		name     string
+		args     args
+		want     string
+		wantErr  bool
+		wantArgs []interface{}
+	}{
+		// Each test case covers different scenarios including subqueries, regular values, and error propagation.
+		{
+			name: "subquery value - success",
+			args: args{
+				op: OperatorIn,
+				v: FilterValue{
+					SelectQuery: &SelectQuery{Raw: "SELECT id FROM categories WHERE active = ?"},
+				},
+				args: &[]interface{}{},
+				buildSelectQuery: func(q *SelectQuery) (string, []interface{}, error) {
+					return "SELECT id FROM categories WHERE active = ?", []interface{}{true}, nil
+				},
+			},
+			want:     "(SELECT id FROM categories WHERE active = ?)",
+			wantErr:  false,
+			wantArgs: []interface{}{true},
+		},
+		{
+			name: "subquery value - error from buildSelectQuery",
+			args: args{
+				op: OperatorIn,
+				v: FilterValue{
+					SelectQuery: &SelectQuery{Raw: "SELECT invalid"},
+				},
+				args: &[]interface{}{},
+				buildSelectQuery: func(q *SelectQuery) (string, []interface{}, error) {
+					return "", nil, errors.New("invalid subquery")
+				},
+			},
+			want:     "",
+			wantErr:  true,
+			wantArgs: []interface{}{},
+		},
+		{
+			name: "subquery value with extra whitespace - trimmed",
+			args: args{
+				op: OperatorEqual,
+				v: FilterValue{
+					SelectQuery: &SelectQuery{Raw: "SELECT COUNT(*) FROM users"},
+				},
+				args: &[]interface{}{},
+				buildSelectQuery: func(q *SelectQuery) (string, []interface{}, error) {
+					return "  SELECT COUNT(*) FROM users  ", []interface{}{}, nil
+				},
+			},
+			want:     "(SELECT COUNT(*) FROM users)",
+			wantErr:  false,
+			wantArgs: []interface{}{},
+		},
+		{
+			name: "subquery value with multiple arguments",
+			args: args{
+				op: OperatorNotIn,
+				v: FilterValue{
+					SelectQuery: &SelectQuery{Raw: "SELECT id FROM users WHERE age > ? AND status = ?"},
+				},
+				args: &[]interface{}{},
+				buildSelectQuery: func(q *SelectQuery) (string, []interface{}, error) {
+					return "SELECT id FROM users WHERE age > ? AND status = ?", []interface{}{18, "active"}, nil
+				},
+			},
+			want:     "(SELECT id FROM users WHERE age > ? AND status = ?)",
+			wantErr:  false,
+			wantArgs: []interface{}{18, "active"},
+		},
+		{
+			name: "non-subquery value - table and column",
+			args: args{
+				op:               OperatorEqual,
+				v:                FilterValue{Table: "users", Column: "id"},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "users.id",
+			wantErr:  false,
+			wantArgs: []interface{}{},
+		},
+		{
+			name: "non-subquery value - column only",
+			args: args{
+				op:               OperatorGreaterThan,
+				v:                FilterValue{Column: "age"},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "age",
+			wantErr:  false,
+			wantArgs: []interface{}{},
+		},
+		{
+			name: "non-subquery value - IS NULL operator",
+			args: args{
+				op:               OperatorIsNull,
+				v:                FilterValue{},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "",
+			wantErr:  false,
+			wantArgs: []interface{}{},
+		},
+		{
+			name: "non-subquery value - IN operator with slice",
+			args: args{
+				op:               OperatorIn,
+				v:                FilterValue{Value: []int{1, 2, 3}},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "(?, ?, ?)",
+			wantErr:  false,
+			wantArgs: []interface{}{1, 2, 3},
+		},
+		{
+			name: "non-subquery value - single value",
+			args: args{
+				op:               OperatorLessThan,
+				v:                FilterValue{Value: 42},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "?",
+			wantErr:  false,
+			wantArgs: []interface{}{42},
+		},
+		{
+			name: "non-subquery value - error from buildFilterValue (IN with non-slice)",
+			args: args{
+				op:               OperatorIn,
+				v:                FilterValue{Value: 123},
+				args:             &[]interface{}{},
+				buildSelectQuery: nil,
+			},
+			want:     "",
+			wantErr:  true,
+			wantArgs: []interface{}{},
+		},
+	}
+	dqb := &dynamicQueryBuilder{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call buildFilterValueWithSelectQuery with the provided arguments.
+			got, err := dqb.buildFilterValueWithSelectQuery(tt.args.op, tt.args.v, tt.args.args, tt.args.buildSelectQuery)
+			// Check if the error state matches the expected result.
+			if (err != nil) != tt.wantErr {
+				t.Errorf("buildFilterValueWithSelectQuery() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// Ensure the generated SQL matches the expected output.
+			if got != tt.want {
+				t.Errorf("buildFilterValueWithSelectQuery() = %v, want %v", got, tt.want)
 			}
 			// Ensure the collected arguments match the expected arguments.
 			if tt.args.args != nil && !reflect.DeepEqual(*tt.args.args, tt.wantArgs) {
@@ -634,28 +809,28 @@ func TestDynamicQueryBuilder_buildJoins(t *testing.T) {
 	}{
 		{
 			name:    "single join, valid table and filter",
-			joins:   []Join{{Type: JoinType("inner"), Table: Table{Name: "users"}, Filter: Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}}},
-			want:    "INNER users ON id = ?",
+			joins:   []Join{{Type: JoinTypeInner, Table: Table{Name: "users"}, Filter: Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}},
+			want:    "INNER JOIN users ON id = ?",
 			wantErr: false,
 		},
 		{
 			name: "multiple joins",
 			joins: []Join{
-				{Type: JoinType("left"), Table: Table{Name: "a"}, Filter: Filter{Field: Field{Column: "x"}, Operator: Operator("="), Value: FilterValue{Value: 2}}},
-				{Type: JoinType("right"), Table: Table{Name: "b"}, Filter: Filter{Field: Field{Column: "y"}, Operator: Operator("<"), Value: FilterValue{Value: 3}}},
+				{Type: JoinType("left"), Table: Table{Name: "a"}, Filter: Filter{Field: Field{Column: "x"}, Operator: OperatorEqual, Value: FilterValue{Value: 2}}},
+				{Type: JoinType("right"), Table: Table{Name: "b"}, Filter: Filter{Field: Field{Column: "y"}, Operator: OperatorLessThan, Value: FilterValue{Value: 3}}},
 			},
 			want:    "LEFT a ON x = ? RIGHT b ON y < ?",
 			wantErr: false,
 		},
 		{
 			name:    "table returns error",
-			joins:   []Join{{Type: JoinType("inner"), Table: Table{}, Filter: Filter{Field: Field{Column: "id"}, Operator: Operator("="), Value: FilterValue{Value: 1}}}},
+			joins:   []Join{{Type: JoinTypeInner, Table: Table{}, Filter: Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}}},
 			want:    "",
 			wantErr: true,
 		},
 		{
 			name:    "filter returns error",
-			joins:   []Join{{Type: JoinType("inner"), Table: Table{Name: "users"}, Filter: Filter{}}},
+			joins:   []Join{{Type: JoinTypeInner, Table: Table{Name: "users"}, Filter: Filter{}}},
 			want:    "",
 			wantErr: true,
 		},
@@ -707,28 +882,28 @@ func TestDynamicQueryBuilder_buildOrderBy(t *testing.T) {
 	}{
 		{
 			name:    "table and column",
-			sorts:   []Sort{{Field: Field{Table: "users", Column: "id"}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{Table: "users", Column: "id"}, Direction: SortDirectionAscending}},
 			want:    "users.id ASC",
 			wantErr: false,
 		},
 		{
 			name:    "column only",
-			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: "DESC"}},
+			sorts:   []Sort{{Field: Field{Column: "name"}, Direction: SortDirectionDescending}},
 			want:    "name DESC",
 			wantErr: false,
 		},
 		{
 			name: "multiple sorts",
 			sorts: []Sort{
-				{Field: Field{Table: "users", Column: "id"}, Direction: "ASC"},
-				{Field: Field{Column: "name"}, Direction: "DESC"},
+				{Field: Field{Table: "users", Column: "id"}, Direction: SortDirectionAscending},
+				{Field: Field{Column: "name"}, Direction: SortDirectionDescending},
 			},
 			want:    "users.id ASC, name DESC",
 			wantErr: false,
 		},
 		{
 			name:    "invalid field (empty)",
-			sorts:   []Sort{{Field: Field{}, Direction: "ASC"}},
+			sorts:   []Sort{{Field: Field{}, Direction: SortDirectionAscending}},
 			want:    "",
 			wantErr: true,
 		},
@@ -824,71 +999,6 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgs(t *testing.T) {
 			// Ensure the collected arguments match the expected arguments.
 			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
 				t.Errorf("buildPlaceholdersAndArgs() args = %v, want %v", gotArgs, tt.wantArgs)
-			}
-		})
-	}
-}
-
-// TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex tests the buildPlaceholdersAndArgsWithIndex method for indexed placeholders in SQL queries.
-func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
-	// Create a new dynamicQueryBuilder instance for testing.
-	dqb := &dynamicQueryBuilder{}
-
-	// Define test cases for different value, column, and indexed placeholder scenarios.
-	tests := []struct {
-		name            string
-		values          interface{}
-		columns         []string
-		startIdx        int
-		nextPlaceholder func(*int) string
-		wantSQL         string
-		wantArgs        []interface{}
-	}{
-		{
-			name: "multi-row insert",
-			values: []map[string]interface{}{
-				{"id": 1, "name": "foo"},
-				{"id": 2, "name": "bar"},
-			},
-			columns:         []string{"id", "name"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			wantSQL:         "($1, $2), ($3, $4)",
-			wantArgs:        []interface{}{1, "foo", 2, "bar"},
-		},
-		{
-			name:            "single-row update",
-			values:          map[string]interface{}{"id": 1, "name": "foo"},
-			columns:         []string{"id", "name"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			wantSQL:         "id = $1, name = $2",
-			wantArgs:        []interface{}{1, "foo"},
-		},
-		{
-			name:            "default case (unsupported type)",
-			values:          123,
-			columns:         []string{"id"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { return "$1" },
-			wantSQL:         "",
-			wantArgs:        nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set the starting index for the placeholder function.
-			idx := tt.startIdx
-			// Call buildPlaceholdersAndArgsWithIndex with the provided values, columns, and placeholder function.
-			gotSQL, gotArgs := dqb.buildPlaceholdersAndArgsWithIndex(tt.values, tt.columns, &idx, tt.nextPlaceholder)
-			// Compare the generated SQL with the expected value.
-			if gotSQL != tt.wantSQL {
-				t.Errorf("buildPlaceholdersAndArgsWithIndex() SQL = %v, want %v", gotSQL, tt.wantSQL)
-			}
-			// Ensure the collected arguments match the expected arguments.
-			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
-				t.Errorf("buildPlaceholdersAndArgsWithIndex() args = %v, want %v", gotArgs, tt.wantArgs)
 			}
 		})
 	}
@@ -1336,6 +1446,71 @@ func TestDynamicQueryBuilder_buildUpdateQuery(t *testing.T) {
 			// Ensure the collected arguments match the expected arguments.
 			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
 				t.Errorf("buildUpdateQuery() args = %v, want %v", gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}
+
+// TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex tests the buildPlaceholdersAndArgsWithIndex method for indexed placeholders in SQL queries.
+func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
+	// Create a new dynamicQueryBuilder instance for testing.
+	dqb := &dynamicQueryBuilder{}
+
+	// Define test cases for different value, column, and indexed placeholder scenarios.
+	tests := []struct {
+		name            string
+		values          interface{}
+		columns         []string
+		startIdx        int
+		nextPlaceholder func(*int) string
+		wantSQL         string
+		wantArgs        []interface{}
+	}{
+		{
+			name: "multi-row insert",
+			values: []map[string]interface{}{
+				{"id": 1, "name": "foo"},
+				{"id": 2, "name": "bar"},
+			},
+			columns:         []string{"id", "name"},
+			startIdx:        1,
+			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
+			wantSQL:         "($1, $2), ($3, $4)",
+			wantArgs:        []interface{}{1, "foo", 2, "bar"},
+		},
+		{
+			name:            "single-row update",
+			values:          map[string]interface{}{"id": 1, "name": "foo"},
+			columns:         []string{"id", "name"},
+			startIdx:        1,
+			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
+			wantSQL:         "id = $1, name = $2",
+			wantArgs:        []interface{}{1, "foo"},
+		},
+		{
+			name:            "default case (unsupported type)",
+			values:          123,
+			columns:         []string{"id"},
+			startIdx:        1,
+			nextPlaceholder: func(idx *int) string { return "$1" },
+			wantSQL:         "",
+			wantArgs:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set the starting index for the placeholder function.
+			idx := tt.startIdx
+			// Call buildPlaceholdersAndArgsWithIndex with the provided values, columns, and placeholder function.
+			gotSQL, gotArgs := dqb.buildPlaceholdersAndArgsWithIndex(tt.values, tt.columns, &idx, tt.nextPlaceholder)
+			// Compare the generated SQL with the expected value.
+			if gotSQL != tt.wantSQL {
+				t.Errorf("buildPlaceholdersAndArgsWithIndex() SQL = %v, want %v", gotSQL, tt.wantSQL)
+			}
+			// Ensure the collected arguments match the expected arguments.
+			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
+				t.Errorf("buildPlaceholdersAndArgsWithIndex() args = %v, want %v", gotArgs, tt.wantArgs)
 			}
 		})
 	}

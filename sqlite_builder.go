@@ -43,7 +43,7 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 
 	// Early return for raw SQL queries to avoid unnecessary processing
 	if q.Raw != "" {
-		return q.Raw, nil, nil
+		return q.Raw, q.RawArgs, nil
 	}
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries

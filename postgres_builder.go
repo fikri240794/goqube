@@ -3,6 +3,7 @@ package goqube
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
@@ -14,6 +15,47 @@ type postgresBuilder struct {
 // newPostgresBuilder creates a new postgresBuilder with PostgreSQL-style placeholders (e.g., $1, $2).
 func newPostgresBuilder() *postgresBuilder {
 	return &postgresBuilder{dynamicQueryBuilder{placeholderFormat: "$%d"}}
+}
+
+// adjustRawQueryPlaceholders adjusts placeholders in raw SQL to match the current parameter index
+func (b *postgresBuilder) adjustRawQueryPlaceholders(rawSQL string, rawArgs []interface{}, paramIndex *int) (string, []interface{}) {
+	if rawSQL == "" || len(rawArgs) == 0 {
+		return rawSQL, rawArgs
+	}
+
+	// Track the starting parameter index for this raw query
+	startIndex := *paramIndex
+
+	// Use regex to find all $1, $2, etc. placeholders and adjust them
+	re := regexp.MustCompile(`\$(\d+)`)
+	adjustedSQL := re.ReplaceAllStringFunc(rawSQL, func(match string) string {
+		// Extract the original placeholder number
+		var originalIndex int
+		fmt.Sscanf(match[1:], "%d", &originalIndex)
+		// Map $1 -> $startIndex, $2 -> $startIndex+1, etc.
+		return fmt.Sprintf("$%d", startIndex+originalIndex-1)
+	})
+
+	// Advance the parameter index by the number of arguments
+	*paramIndex += len(rawArgs)
+
+	return adjustedSQL, rawArgs
+}
+
+// buildSelectQueryWithParamIndex builds a SelectQuery with parameter index awareness for subqueries
+func (b *postgresBuilder) buildSelectQueryWithParamIndex(q *SelectQuery, paramIndex *int) (string, []interface{}, error) {
+	if q == nil {
+		return "", nil, ErrInvalidFilter
+	}
+
+	// Handle raw SQL queries with parameter index adjustment
+	if q.Raw != "" {
+		adjustedSQL, adjustedArgs := b.adjustRawQueryPlaceholders(q.Raw, q.RawArgs, paramIndex)
+		return adjustedSQL, adjustedArgs, nil
+	}
+
+	// For non-raw queries, delegate to the standard BuildSelectQuery
+	return b.BuildSelectQuery(q)
 }
 
 // BuildDeleteQuery builds a SQL DELETE statement and its arguments for PostgreSQL.
@@ -45,7 +87,7 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 
 	// Early return for raw SQL queries to avoid unnecessary processing
 	if q.Raw != "" {
-		return q.Raw, nil, nil
+		return q.Raw, q.RawArgs, nil
 	}
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
@@ -55,13 +97,15 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 
 	sb.WriteString("SELECT ")
 
-	fields, err := b.buildFields(q.Fields, &args, b.BuildSelectQuery)
+	fields, err := b.buildFields(q.Fields, &args, func(sq *SelectQuery) (string, []interface{}, error) {
+		return b.buildSelectQueryWithParamIndex(sq, &paramIndex)
+	})
 	if err != nil {
 		return "", nil, err
 	}
 	sb.WriteString(fields)
 
-	table, err := b.buildTable(q.Table, &args)
+	table, err := b.buildTableWithParamIndex(q.Table, &args, &paramIndex)
 	if err != nil {
 		return "", nil, err
 	}
@@ -73,7 +117,9 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 		joins, err := b.buildJoins(
 			q.Joins,
 			&args,
-			b.BuildSelectQuery,
+			func(sq *SelectQuery) (string, []interface{}, error) {
+				return b.buildSelectQueryWithParamIndex(sq, &paramIndex)
+			},
 			func(f *Filter, args *[]interface{}) (string, error) {
 				return b.buildFilter(f, args, &paramIndex, true)
 			},
@@ -221,7 +267,8 @@ func (b *postgresBuilder) buildFilterValue(op Operator, v FilterValue, args *[]i
 		return b.buildFilterValueLike(v, args, paramIndex)
 	}
 	if v.SelectQuery != nil {
-		sub, subArgs, err := b.BuildSelectQuery(v.SelectQuery)
+		// Use parameter index aware version for subqueries
+		sub, subArgs, err := b.buildSelectQueryWithParamIndex(v.SelectQuery, paramIndex)
 		if err != nil {
 			return "", err
 		}
@@ -309,6 +356,13 @@ func (b *postgresBuilder) buildOrderBy(sorts []Sort) (string, error) {
 // buildTable returns the SQL representation of a table or subquery for PostgreSQL, supporting table names and subqueries with aliasing.
 func (b *postgresBuilder) buildTable(t Table, args *[]interface{}) (string, error) {
 	return b.dynamicQueryBuilder.buildTable(t, args, b.BuildSelectQuery)
+}
+
+// buildTableWithParamIndex returns the SQL representation of a table or subquery with parameter index awareness for PostgreSQL.
+func (b *postgresBuilder) buildTableWithParamIndex(t Table, args *[]interface{}, paramIndex *int) (string, error) {
+	return b.dynamicQueryBuilder.buildTable(t, args, func(sq *SelectQuery) (string, []interface{}, error) {
+		return b.buildSelectQueryWithParamIndex(sq, paramIndex)
+	})
 }
 
 // nextPlaceholder generates the next indexed parameter placeholder (e.g., $1, $2) for PostgreSQL queries.
