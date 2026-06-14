@@ -4,6 +4,10 @@ import "errors"
 
 // Error variables for validating query structure and builder usage.
 var (
+	// ErrInvalidBulkUpdateQuery is returned when a bulk update query lacks a table, primary key, or values.
+	ErrInvalidBulkUpdateQuery = errors.New("invalid bulk update query: table, primary key, and values required")
+	// ErrInvalidBulkUpdateQueryPrimaryKey is returned when a bulk update query payload is missing the primary key field.
+	ErrInvalidBulkUpdateQueryPrimaryKey = errors.New("invalid bulk update query: values must contain the primary key")
 	// ErrInvalidDeleteQuery is returned when a delete query is missing a table.
 	ErrInvalidDeleteQuery = errors.New("invalid delete query: table required")
 	// ErrInvalidField is returned when a field does not specify a column or subquery.

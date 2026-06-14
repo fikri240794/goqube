@@ -735,3 +735,86 @@ func TestMySQLBuilder_buildTable(t *testing.T) {
 		})
 	}
 }
+
+func TestMySQLBuilder_BuildBulkUpdateQuery(t *testing.T) {
+	b := newMySQLBuilder()
+	tests := []struct {
+		name     string
+		q        *BulkUpdateQuery
+		wantSQL  string
+		wantArgs []interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "nil query",
+			q:        nil,
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "empty table",
+			q:        &BulkUpdateQuery{Table: "", PrimaryKey: "id", FieldsValues: []map[string]interface{}{{"id": 1, "name": "a"}}},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "empty fields values",
+			q:        &BulkUpdateQuery{Table: "users", PrimaryKey: "id", FieldsValues: []map[string]interface{}{}},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "no update columns",
+			q:        &BulkUpdateQuery{Table: "users", PrimaryKey: "id", FieldsValues: []map[string]interface{}{{"id": 1}}},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "missing primary key config",
+			q:        &BulkUpdateQuery{Table: "users", PrimaryKey: "", FieldsValues: []map[string]interface{}{{"id": 1, "name": "a"}}},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name:     "missing primary key in values",
+			q:        &BulkUpdateQuery{Table: "users", PrimaryKey: "id", FieldsValues: []map[string]interface{}{{"name": "a"}}},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "valid update multiple rows",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+					{"id": 2, "name": "bar", "age": 40},
+				},
+			},
+			wantSQL:  "UPDATE users AS t JOIN (SELECT ? AS id, ? AS age, ? AS name UNION ALL SELECT ?, ?, ?) AS c ON t.id = c.id SET t.age = c.age, t.name = c.name",
+			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotArgs, err := b.BuildBulkUpdateQuery(tt.q)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("BuildBulkUpdateQuery() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.wantSQL {
+				t.Errorf("BuildBulkUpdateQuery() = \n%v\nwant \n%v", got, tt.wantSQL)
+			}
+			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
+				t.Errorf("BuildBulkUpdateQuery() args = %v, want %v", gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}

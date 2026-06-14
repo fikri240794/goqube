@@ -2,6 +2,7 @@ package goqube
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -131,6 +132,77 @@ func (b *mysqlBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, 
 	return b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
+}
+
+// BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for MySQL.
+func (b *mysqlBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []interface{}, error) {
+	if q == nil || q.Table == "" || len(q.FieldsValues) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+	if q.PrimaryKey == "" {
+		return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+	}
+
+	columns := make([]string, 0, len(q.FieldsValues[0]))
+	for col := range q.FieldsValues[0] {
+		if col != q.PrimaryKey {
+			columns = append(columns, col)
+		}
+	}
+	sort.Strings(columns)
+
+	if len(columns) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+
+	var valuesRows []string
+	var args []interface{}
+
+	for i, row := range q.FieldsValues {
+		pkVal, ok := row[q.PrimaryKey]
+		if !ok {
+			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+		}
+
+		var rowPlaceholders []string
+		
+		args = append(args, pkVal)
+		if i == 0 {
+			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("? AS %s", q.PrimaryKey))
+		} else {
+			rowPlaceholders = append(rowPlaceholders, "?")
+		}
+
+		for _, col := range columns {
+			args = append(args, row[col])
+			if i == 0 {
+				rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("? AS %s", col))
+			} else {
+				rowPlaceholders = append(rowPlaceholders, "?")
+			}
+		}
+		
+		valuesRows = append(valuesRows, fmt.Sprintf("SELECT %s", strings.Join(rowPlaceholders, ", ")))
+	}
+
+	var sb strings.Builder
+	sb.WriteString("UPDATE ")
+	sb.WriteString(q.Table)
+	sb.WriteString(" AS t JOIN (")
+	sb.WriteString(strings.Join(valuesRows, " UNION ALL "))
+	sb.WriteString(") AS c ON t.")
+	sb.WriteString(q.PrimaryKey)
+	sb.WriteString(" = c.")
+	sb.WriteString(q.PrimaryKey)
+	sb.WriteString(" SET ")
+	
+	setParts := make([]string, len(columns))
+	for i, col := range columns {
+		setParts[i] = fmt.Sprintf("t.%s = c.%s", col, col)
+	}
+	sb.WriteString(strings.Join(setParts, ", "))
+
+	return sb.String(), args, nil
 }
 
 // buildFields returns the SQL representation of fields for MySQL, supporting subqueries and aliases.

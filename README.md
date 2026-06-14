@@ -90,6 +90,21 @@ sql, args, err := q.BuildUpdateQuery(DialectPostgres)
 // Args: [bar 1]
 ```
 
+### 🔄 Bulk UPDATE Example
+```go
+q := &BulkUpdateQuery{
+    Table:      "users",
+    PrimaryKey: "id",
+    FieldsValues: []map[string]interface{}{
+        {"id": 1, "name": "foo", "age": 30},
+        {"id": 2, "name": "bar", "age": 40},
+    },
+}
+sql, args, err := q.BuildBulkUpdateQuery(DialectPostgres)
+// SQL: UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS c(id, age, name) WHERE t.id = c.id
+// Args: [1 30 foo 2 40 bar]
+```
+
 ### 🗑️ DELETE Example
 ```go
 q := &DeleteQuery{

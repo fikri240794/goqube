@@ -2,6 +2,7 @@ package goqube
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -136,6 +137,79 @@ func (b *sqliteBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{},
 	return b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
+}
+
+// BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for SQLite.
+func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []interface{}, error) {
+	if q == nil || q.Table == "" || len(q.FieldsValues) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+	if q.PrimaryKey == "" {
+		return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+	}
+
+	columns := make([]string, 0, len(q.FieldsValues[0]))
+	for col := range q.FieldsValues[0] {
+		if col != q.PrimaryKey {
+			columns = append(columns, col)
+		}
+	}
+	sort.Strings(columns)
+
+	if len(columns) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+
+	var valuesRows []string
+	var args []interface{}
+
+	for _, row := range q.FieldsValues {
+		pkVal, ok := row[q.PrimaryKey]
+		if !ok {
+			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+		}
+
+		var rowPlaceholders []string
+		
+		args = append(args, pkVal)
+		rowPlaceholders = append(rowPlaceholders, "?")
+
+		for _, col := range columns {
+			args = append(args, row[col])
+			rowPlaceholders = append(rowPlaceholders, "?")
+		}
+		
+		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+	}
+
+	var sb strings.Builder
+	sb.WriteString("UPDATE ")
+	sb.WriteString(q.Table)
+	sb.WriteString(" SET ")
+	
+	setParts := make([]string, len(columns))
+	for i, col := range columns {
+		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
+	}
+	sb.WriteString(strings.Join(setParts, ", "))
+	
+	sb.WriteString(" FROM (VALUES ")
+	sb.WriteString(strings.Join(valuesRows, ", "))
+	sb.WriteString(") AS c(")
+	
+	cColumns := make([]string, 0, len(columns)+1)
+	cColumns = append(cColumns, q.PrimaryKey)
+	cColumns = append(cColumns, columns...)
+	sb.WriteString(strings.Join(cColumns, ", "))
+	
+	sb.WriteString(") WHERE ")
+	sb.WriteString(q.Table)
+	sb.WriteString(".")
+	sb.WriteString(q.PrimaryKey)
+	sb.WriteString(" = c.")
+	sb.WriteString(q.PrimaryKey)
+
+	return sb.String(), args, nil
 }
 
 // buildFields returns the SQL representation of fields for SQLite, supporting subqueries and aliases.

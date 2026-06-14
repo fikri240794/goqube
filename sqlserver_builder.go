@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -189,6 +190,78 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for SQL Server.
 func (b *sqlServerBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
 	return b.buildUpdateQueryWithContinuousIndex(q, 0, b.nextPlaceholder, b.buildFilter)
+}
+
+// BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for SQL Server.
+func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []interface{}, error) {
+	if q == nil || q.Table == "" || len(q.FieldsValues) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+	if q.PrimaryKey == "" {
+		return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+	}
+
+	columns := make([]string, 0, len(q.FieldsValues[0]))
+	for col := range q.FieldsValues[0] {
+		if col != q.PrimaryKey {
+			columns = append(columns, col)
+		}
+	}
+	sort.Strings(columns)
+
+	if len(columns) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQuery
+	}
+
+	var valuesRows []string
+	var args []interface{}
+	paramIndex := 0
+
+	for _, row := range q.FieldsValues {
+		pkVal, ok := row[q.PrimaryKey]
+		if !ok {
+			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
+		}
+
+		var rowPlaceholders []string
+		
+		args = append(args, pkVal)
+		rowPlaceholders = append(rowPlaceholders, b.nextPlaceholder(&paramIndex))
+
+		for _, col := range columns {
+			args = append(args, row[col])
+			rowPlaceholders = append(rowPlaceholders, b.nextPlaceholder(&paramIndex))
+		}
+		
+		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+	}
+
+	var sb strings.Builder
+	sb.WriteString("UPDATE t SET ")
+	
+	setParts := make([]string, len(columns))
+	for i, col := range columns {
+		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
+	}
+	sb.WriteString(strings.Join(setParts, ", "))
+	
+	sb.WriteString(" FROM ")
+	sb.WriteString(q.Table)
+	sb.WriteString(" AS t INNER JOIN (VALUES ")
+	sb.WriteString(strings.Join(valuesRows, ", "))
+	sb.WriteString(") AS c(")
+	
+	cColumns := make([]string, 0, len(columns)+1)
+	cColumns = append(cColumns, q.PrimaryKey)
+	cColumns = append(cColumns, columns...)
+	sb.WriteString(strings.Join(cColumns, ", "))
+	
+	sb.WriteString(") ON t.")
+	sb.WriteString(q.PrimaryKey)
+	sb.WriteString(" = c.")
+	sb.WriteString(q.PrimaryKey)
+
+	return sb.String(), args, nil
 }
 
 // buildFields returns the SQL representation of fields for SQL Server, supporting subqueries and aliases.

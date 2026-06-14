@@ -13,6 +13,7 @@ type queryBuilder interface {
 	BuildInsertQuery(q *InsertQuery) (query string, args []interface{}, err error)
 	BuildSelectQuery(q *SelectQuery) (query string, args []interface{}, err error)
 	BuildUpdateQuery(q *UpdateQuery) (query string, args []interface{}, err error)
+	BuildBulkUpdateQuery(q *BulkUpdateQuery) (query string, args []interface{}, err error)
 }
 
 // dynamicQueryBuilder provides shared logic for building SQL queries with customizable placeholder formats.

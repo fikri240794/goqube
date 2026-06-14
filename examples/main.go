@@ -56,13 +56,18 @@ func main() {
 		complexUpdate(d.dialect)
 		fmt.Println()
 
+		// Bulk UPDATE
+		fmt.Println("7. Bulk UPDATE:")
+		bulkUpdate(d.dialect)
+		fmt.Println()
+
 		// Simple DELETE
-		fmt.Println("7. Simple DELETE:")
+		fmt.Println("8. Simple DELETE:")
 		simpleDelete(d.dialect)
 		fmt.Println()
 
 		// Complex DELETE with multiple conditions
-		fmt.Println("8. Complex DELETE:")
+		fmt.Println("9. Complex DELETE:")
 		complexDelete(d.dialect)
 		fmt.Println()
 
@@ -404,6 +409,31 @@ func complexDelete(dialect goqube.Dialect) {
 	}
 
 	sql, args, err := query.BuildDeleteQuery(dialect)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+
+	fmt.Printf("SQL: %s\n", sql)
+	fmt.Printf("Args: %v\n", args)
+}
+
+// Bulk UPDATE example
+func bulkUpdate(dialect goqube.Dialect) {
+	// Data to bulk update
+	usersData := []map[string]interface{}{
+		{"id": 1, "name": "Alice Smith", "age": 28, "status": "active"},
+		{"id": 2, "name": "Bob Jones", "age": 35, "status": "inactive"},
+		{"id": 3, "name": "Charlie Brown", "age": 22, "status": "active"},
+	}
+
+	query := &goqube.BulkUpdateQuery{
+		Table:        "users",
+		PrimaryKey:   "id",
+		FieldsValues: usersData,
+	}
+
+	sql, args, err := query.BuildBulkUpdateQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
 		return
