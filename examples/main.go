@@ -427,10 +427,18 @@ func bulkUpdate(dialect goqube.Dialect) {
 		{"id": 3, "name": "Charlie Brown", "age": 22, "status": "active"},
 	}
 
+	// ColumnsType is REQUIRED for PostgreSQL and SQL Server dialects.
+	// For MySQL and SQLite, ColumnsType is optional but recommended for consistency.
 	query := &goqube.BulkUpdateQuery{
 		Table:        "users",
 		PrimaryKey:   "id",
 		FieldsValues: usersData,
+		ColumnsType: map[string]string{
+			"id":     "integer",
+			"age":    "integer",
+			"name":   "text",
+			"status": "text",
+		},
 	}
 
 	sql, args, err := query.BuildBulkUpdateQuery(dialect)

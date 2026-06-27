@@ -213,9 +213,29 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 		return "", nil, ErrInvalidBulkUpdateQuery
 	}
 
+	// Validate that ColumnsType is provided and contains all required columns
+	// SQL Server requires explicit CONVERT type casts for VALUES clause placeholders
+	if len(q.ColumnsType) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+	}
+	if _, ok := q.ColumnsType[q.PrimaryKey]; !ok {
+		return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+	}
+	for _, col := range columns {
+		if _, ok := q.ColumnsType[col]; !ok {
+			return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+		}
+	}
+
 	var valuesRows []string
 	var args []interface{}
 	paramIndex := 0
+
+	pkType := q.ColumnsType[q.PrimaryKey]
+	colTypes := make(map[string]string, len(columns))
+	for _, col := range columns {
+		colTypes[col] = q.ColumnsType[col]
+	}
 
 	for _, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
@@ -224,38 +244,40 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 		}
 
 		var rowPlaceholders []string
-		
-		args = append(args, pkVal)
-		rowPlaceholders = append(rowPlaceholders, b.nextPlaceholder(&paramIndex))
 
+		// Add primary key first with CONVERT type cast
+		args = append(args, pkVal)
+		rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("CONVERT(%s, %s)", pkType, b.nextPlaceholder(&paramIndex)))
+
+		// Add other columns with CONVERT type cast
 		for _, col := range columns {
 			args = append(args, row[col])
-			rowPlaceholders = append(rowPlaceholders, b.nextPlaceholder(&paramIndex))
+			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("CONVERT(%s, %s)", colTypes[col], b.nextPlaceholder(&paramIndex)))
 		}
-		
+
 		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
 	}
 
 	var sb strings.Builder
 	sb.WriteString("UPDATE t SET ")
-	
+
 	setParts := make([]string, len(columns))
 	for i, col := range columns {
 		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
 	}
 	sb.WriteString(strings.Join(setParts, ", "))
-	
+
 	sb.WriteString(" FROM ")
 	sb.WriteString(q.Table)
 	sb.WriteString(" AS t INNER JOIN (VALUES ")
 	sb.WriteString(strings.Join(valuesRows, ", "))
 	sb.WriteString(") AS c(")
-	
+
 	cColumns := make([]string, 0, len(columns)+1)
 	cColumns = append(cColumns, q.PrimaryKey)
 	cColumns = append(cColumns, columns...)
 	sb.WriteString(strings.Join(cColumns, ", "))
-	
+
 	sb.WriteString(") ON t.")
 	sb.WriteString(q.PrimaryKey)
 	sb.WriteString(" = c.")

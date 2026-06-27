@@ -1589,6 +1589,70 @@ func TestPostgresBuilder_BuildBulkUpdateQuery(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name: "missing ColumnsType",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "ColumnsType missing primary key",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+				ColumnsType: map[string]string{
+					"name": "text",
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "ColumnsType missing column entry",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+				},
+				ColumnsType: map[string]string{
+					"id":   "integer",
+					"name": "text",
+					// "age" is missing
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "primary key missing in row with ColumnsType",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"name": "foo"}, // "id" is missing from the row
+				},
+				ColumnsType: map[string]string{
+					"id":   "integer",
+					"name": "text",
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
 			name: "valid update multiple rows",
 			q: &BulkUpdateQuery{
 				Table:      "users",
@@ -1597,9 +1661,53 @@ func TestPostgresBuilder_BuildBulkUpdateQuery(t *testing.T) {
 					{"id": 1, "name": "foo", "age": 30},
 					{"id": 2, "name": "bar", "age": 40},
 				},
+				ColumnsType: map[string]string{
+					"id":   "integer",
+					"age":  "integer",
+					"name": "text",
+				},
 			},
-			wantSQL:  "UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS c(id, age, name) WHERE t.id = c.id",
+			wantSQL:  "UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::integer, $2::integer, $3::text), ($4::integer, $5::integer, $6::text)) AS c(id, age, name) WHERE t.id = c.id",
 			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "with ColumnsType custom types",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+					{"id": 2, "name": "bar", "age": 40},
+				},
+				ColumnsType: map[string]string{
+					"id":   "bigint",
+					"age":  "smallint",
+					"name": "varchar(100)",
+				},
+			},
+			wantSQL:  "UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::bigint, $2::smallint, $3::varchar(100)), ($4::bigint, $5::smallint, $6::varchar(100))) AS c(id, age, name) WHERE t.id = c.id",
+			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "with mixed data types",
+			q: &BulkUpdateQuery{
+				Table:      "products",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "Widget", "price": 19.99, "active": true},
+					{"id": 2, "name": "Gadget", "price": 29.99, "active": false},
+				},
+				ColumnsType: map[string]string{
+					"id":     "integer",
+					"active": "boolean",
+					"name":   "text",
+					"price":  "double precision",
+				},
+			},
+			wantSQL:  "UPDATE products AS t SET active = c.active, name = c.name, price = c.price FROM (VALUES ($1::integer, $2::boolean, $3::text, $4::double precision), ($5::integer, $6::boolean, $7::text, $8::double precision)) AS c(id, active, name, price) WHERE t.id = c.id",
+			wantArgs: []interface{}{1, true, "Widget", 19.99, 2, false, "Gadget", 29.99},
 			wantErr:  false,
 		},
 	}

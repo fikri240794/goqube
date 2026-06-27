@@ -2001,6 +2001,70 @@ func Test_sqlServerBuilder_BuildBulkUpdateQuery(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name: "missing ColumnsType",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "ColumnsType missing primary key",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+				ColumnsType: map[string]string{
+					"name": "nvarchar(max)",
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "ColumnsType missing column entry",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+				},
+				ColumnsType: map[string]string{
+					"id":   "int",
+					"name": "nvarchar(max)",
+					// "age" is missing
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
+			name: "primary key missing in row with ColumnsType",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"name": "foo"}, // "id" is missing from the row
+				},
+				ColumnsType: map[string]string{
+					"id":   "int",
+					"name": "nvarchar(max)",
+				},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
+		},
+		{
 			name: "valid update multiple rows",
 			q: &BulkUpdateQuery{
 				Table:      "users",
@@ -2009,9 +2073,53 @@ func Test_sqlServerBuilder_BuildBulkUpdateQuery(t *testing.T) {
 					{"id": 1, "name": "foo", "age": 30},
 					{"id": 2, "name": "bar", "age": 40},
 				},
+				ColumnsType: map[string]string{
+					"id":   "int",
+					"age":  "int",
+					"name": "nvarchar(max)",
+				},
 			},
-			wantSQL:  "UPDATE t SET age = c.age, name = c.name FROM users AS t INNER JOIN (VALUES (@p0, @p1, @p2), (@p3, @p4, @p5)) AS c(id, age, name) ON t.id = c.id",
+			wantSQL:  "UPDATE t SET age = c.age, name = c.name FROM users AS t INNER JOIN (VALUES (CONVERT(int, @p0), CONVERT(int, @p1), CONVERT(nvarchar(max), @p2)), (CONVERT(int, @p3), CONVERT(int, @p4), CONVERT(nvarchar(max), @p5))) AS c(id, age, name) ON t.id = c.id",
 			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "with ColumnsType custom types",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+					{"id": 2, "name": "bar", "age": 40},
+				},
+				ColumnsType: map[string]string{
+					"id":   "bigint",
+					"age":  "tinyint",
+					"name": "varchar(100)",
+				},
+			},
+			wantSQL:  "UPDATE t SET age = c.age, name = c.name FROM users AS t INNER JOIN (VALUES (CONVERT(bigint, @p0), CONVERT(tinyint, @p1), CONVERT(varchar(100), @p2)), (CONVERT(bigint, @p3), CONVERT(tinyint, @p4), CONVERT(varchar(100), @p5))) AS c(id, age, name) ON t.id = c.id",
+			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "with mixed data types",
+			q: &BulkUpdateQuery{
+				Table:      "products",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "Widget", "price": 19.99, "active": true},
+					{"id": 2, "name": "Gadget", "price": 29.99, "active": false},
+				},
+				ColumnsType: map[string]string{
+					"id":     "int",
+					"active": "bit",
+					"name":   "nvarchar(max)",
+					"price":  "float",
+				},
+			},
+			wantSQL:  "UPDATE t SET active = c.active, name = c.name, price = c.price FROM products AS t INNER JOIN (VALUES (CONVERT(int, @p0), CONVERT(bit, @p1), CONVERT(nvarchar(max), @p2), CONVERT(float, @p3)), (CONVERT(int, @p4), CONVERT(bit, @p5), CONVERT(nvarchar(max), @p6), CONVERT(float, @p7))) AS c(id, active, name, price) ON t.id = c.id",
+			wantArgs: []interface{}{1, true, "Widget", 19.99, 2, false, "Gadget", 29.99},
 			wantErr:  false,
 		},
 	}

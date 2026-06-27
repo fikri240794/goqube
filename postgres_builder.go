@@ -214,10 +214,30 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 		return "", nil, ErrInvalidBulkUpdateQuery
 	}
 
+	// Validate that ColumnsType is provided and contains all required columns
+	// PostgreSQL requires explicit type casts (::type) for VALUES clause placeholders
+	if len(q.ColumnsType) == 0 {
+		return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+	}
+	if _, ok := q.ColumnsType[q.PrimaryKey]; !ok {
+		return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+	}
+	for _, col := range columns {
+		if _, ok := q.ColumnsType[col]; !ok {
+			return "", nil, ErrInvalidBulkUpdateQueryMissingColumnType
+		}
+	}
+
 	// Preallocate placeholders and args
 	var valuesRows []string
 	var args []interface{}
 	paramIndex := 1
+
+	pkType := q.ColumnsType[q.PrimaryKey]
+	colTypes := make(map[string]string, len(columns))
+	for _, col := range columns {
+		colTypes[col] = q.ColumnsType[col]
+	}
 
 	for _, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
@@ -226,19 +246,19 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 		}
 
 		var rowPlaceholders []string
-		
-		// Add primary key first
+
+		// Add primary key first with type cast (PostgreSQL requires ::type for VALUES placeholders)
 		args = append(args, pkVal)
-		rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d", paramIndex))
+		rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d::%s", paramIndex, pkType))
 		paramIndex++
 
-		// Add other columns
+		// Add other columns with type cast
 		for _, col := range columns {
 			args = append(args, row[col])
-			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d", paramIndex))
+			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d::%s", paramIndex, colTypes[col]))
 			paramIndex++
 		}
-		
+
 		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
 	}
 
@@ -246,22 +266,22 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 	sb.WriteString("UPDATE ")
 	sb.WriteString(q.Table)
 	sb.WriteString(" AS t SET ")
-	
+
 	setParts := make([]string, len(columns))
 	for i, col := range columns {
 		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
 	}
 	sb.WriteString(strings.Join(setParts, ", "))
-	
+
 	sb.WriteString(" FROM (VALUES ")
 	sb.WriteString(strings.Join(valuesRows, ", "))
 	sb.WriteString(") AS c(")
-	
+
 	cColumns := make([]string, 0, len(columns)+1)
 	cColumns = append(cColumns, q.PrimaryKey)
 	cColumns = append(cColumns, columns...)
 	sb.WriteString(strings.Join(cColumns, ", "))
-	
+
 	sb.WriteString(") WHERE t.")
 	sb.WriteString(q.PrimaryKey)
 	sb.WriteString(" = c.")

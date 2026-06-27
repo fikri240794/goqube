@@ -99,10 +99,19 @@ q := &BulkUpdateQuery{
         {"id": 1, "name": "foo", "age": 30},
         {"id": 2, "name": "bar", "age": 40},
     },
+    ColumnsType: map[string]string{
+        "id":   "integer",
+        "age":  "integer",
+        "name": "text",
+    },
 }
 sql, args, err := q.BuildBulkUpdateQuery(DialectPostgres)
-// SQL: UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1, $2, $3), ($4, $5, $6)) AS c(id, age, name) WHERE t.id = c.id
+// SQL: UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::integer, $2::integer, $3::text), ($4::integer, $5::integer, $6::text)) AS c(id, age, name) WHERE t.id = c.id
 // Args: [1 30 foo 2 40 bar]
+
+// ⚠️ ColumnsType is REQUIRED for PostgreSQL and SQL Server dialects
+// to ensure proper type casting in the VALUES clause.
+// For MySQL and SQLite, ColumnsType is optional.
 ```
 
 ### 🗑️ DELETE Example
