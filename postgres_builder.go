@@ -286,6 +286,8 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 	sb.WriteString(q.PrimaryKey)
 	sb.WriteString(" = c.")
 	sb.WriteString(q.PrimaryKey)
+	sb.WriteString("::")
+	sb.WriteString(pkType)
 
 	return sb.String(), args, nil
 }

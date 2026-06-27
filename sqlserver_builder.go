@@ -280,8 +280,11 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 
 	sb.WriteString(") ON t.")
 	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" = c.")
+	sb.WriteString(" = CONVERT(")
+	sb.WriteString(pkType)
+	sb.WriteString(", c.")
 	sb.WriteString(q.PrimaryKey)
+	sb.WriteString(")")
 
 	return sb.String(), args, nil
 }
