@@ -106,11 +106,12 @@ q := &BulkUpdateQuery{
     },
 }
 sql, args, err := q.BuildBulkUpdateQuery(DialectPostgres)
-// SQL: UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::integer, $2::integer, $3::text), ($4::integer, $5::integer, $6::text)) AS c(id, age, name) WHERE t.id = c.id
+// SQL: UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::integer, $2::integer, $3::text), ($4::integer, $5::integer, $6::text)) AS c(id, age, name) WHERE t.id = c.id::integer
 // Args: [1 30 foo 2 40 bar]
 
-// ⚠️ ColumnsType is REQUIRED for PostgreSQL and SQL Server dialects
-// to ensure proper type casting in the VALUES clause.
+// ⚠️ ColumnsType is REQUIRED for PostgreSQL and SQL Server dialects.
+// It enables proper type casting in VALUES placeholders ($1::integer)
+// and in the JOIN condition (c.id::integer / CONVERT(type, c.id)).
 // For MySQL and SQLite, ColumnsType is optional.
 ```
 
