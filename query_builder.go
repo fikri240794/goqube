@@ -531,3 +531,26 @@ func (b *dynamicQueryBuilder) nextPlaceholder(paramIndex *int) string {
 	// Use previous index value for custom format placeholders
 	return fmt.Sprintf(b.placeholderFormat, *paramIndex-1)
 }
+
+// buildReturningClause returns the RETURNING clause for PostgreSQL and SQLite dialects.
+// If returning is nil or empty, it returns an empty string (no clause added).
+func (b *dynamicQueryBuilder) buildReturningClause(returning []string) string {
+	if len(returning) == 0 {
+		return ""
+	}
+	return " RETURNING " + strings.Join(returning, ", ")
+}
+
+// buildOutputClause returns the OUTPUT clause for SQL Server dialect.
+// The prefix parameter determines whether to use "inserted" or "deleted" depending on the operation.
+// If returning is nil or empty, it returns an empty string (no clause added).
+func (b *dynamicQueryBuilder) buildOutputClause(returning []string, prefix string) string {
+	if len(returning) == 0 {
+		return ""
+	}
+	cols := make([]string, len(returning))
+	for i, col := range returning {
+		cols[i] = prefix + "." + col
+	}
+	return " OUTPUT " + strings.Join(cols, ", ")
+}

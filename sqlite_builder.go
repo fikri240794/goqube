@@ -26,14 +26,28 @@ func (b *sqliteBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface{},
 	args := make([]interface{}, 0, 8)
 
 	// Use closure to maintain consistent filter building without recreating function on each call
-	return b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
+	query, argsOut, err := b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, argsOut, nil
 }
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for SQLite.
 func (b *sqliteBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	return b.buildInsertQuery(q, 0, nil)
+	query, args, err := b.buildInsertQuery(q, 0, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // BuildSelectQuery builds a SQL SELECT statement and its arguments for SQLite.
@@ -134,9 +148,16 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for SQLite.
 func (b *sqliteBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
 	// Build the UPDATE query using the provided filter builder for complex WHERE logic.
-	return b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
+	query, args, err := b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for SQLite.
@@ -170,7 +191,7 @@ func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inte
 		}
 
 		var rowPlaceholders []string
-		
+
 		args = append(args, pkVal)
 		rowPlaceholders = append(rowPlaceholders, "?")
 
@@ -178,7 +199,7 @@ func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inte
 			args = append(args, row[col])
 			rowPlaceholders = append(rowPlaceholders, "?")
 		}
-		
+
 		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
 	}
 
@@ -186,22 +207,22 @@ func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inte
 	sb.WriteString("UPDATE ")
 	sb.WriteString(q.Table)
 	sb.WriteString(" SET ")
-	
+
 	setParts := make([]string, len(columns))
 	for i, col := range columns {
 		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
 	}
 	sb.WriteString(strings.Join(setParts, ", "))
-	
+
 	sb.WriteString(" FROM (VALUES ")
 	sb.WriteString(strings.Join(valuesRows, ", "))
 	sb.WriteString(") AS c(")
-	
+
 	cColumns := make([]string, 0, len(columns)+1)
 	cColumns = append(cColumns, q.PrimaryKey)
 	cColumns = append(cColumns, columns...)
 	sb.WriteString(strings.Join(cColumns, ", "))
-	
+
 	sb.WriteString(") WHERE ")
 	sb.WriteString(q.Table)
 	sb.WriteString(".")
@@ -209,7 +230,11 @@ func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inte
 	sb.WriteString(" = c.")
 	sb.WriteString(q.PrimaryKey)
 
-	return sb.String(), args, nil
+	query := sb.String()
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // buildFields returns the SQL representation of fields for SQLite, supporting subqueries and aliases.

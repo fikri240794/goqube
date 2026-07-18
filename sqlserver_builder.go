@@ -70,14 +70,35 @@ func (b *sqlServerBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface
 	paramIndex := 0
 
 	// Use closure with indexed placeholders for SQL Server-specific parameter handling
-	return b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
+	query, argsOut, err := b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, &paramIndex, true)
 	})
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildOutputClause(q.Returning, "deleted"); clause != "" {
+		// OUTPUT goes before WHERE for DELETE in SQL Server
+		if strings.Contains(query, " WHERE ") {
+			query = strings.Replace(query, " WHERE ", clause+" WHERE ", 1)
+		} else {
+			// No WHERE clause, append OUTPUT after table name
+			query += clause
+		}
+	}
+	return query, argsOut, nil
 }
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for SQL Server.
 func (b *sqlServerBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	return b.buildInsertQuery(q, 0, b.nextPlaceholder)
+	query, args, err := b.buildInsertQuery(q, 0, b.nextPlaceholder)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildOutputClause(q.Returning, "inserted"); clause != "" {
+		// OUTPUT goes before VALUES in SQL Server
+		query = strings.Replace(query, " VALUES", clause+" VALUES", 1)
+	}
+	return query, args, nil
 }
 
 // BuildSelectQuery builds a SQL SELECT statement and its arguments for SQL Server.
@@ -189,7 +210,20 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for SQL Server.
 func (b *sqlServerBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
-	return b.buildUpdateQueryWithContinuousIndex(q, 0, b.nextPlaceholder, b.buildFilter)
+	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 0, b.nextPlaceholder, b.buildFilter)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildOutputClause(q.Returning, "inserted"); clause != "" {
+		// OUTPUT goes before WHERE for UPDATE in SQL Server
+		if strings.Contains(query, " WHERE ") {
+			query = strings.Replace(query, " WHERE ", clause+" WHERE ", 1)
+		} else {
+			// No WHERE clause, append OUTPUT after SET clause
+			query += clause
+		}
+	}
+	return query, args, nil
 }
 
 // BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for SQL Server.
@@ -286,7 +320,11 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 	sb.WriteString(q.PrimaryKey)
 	sb.WriteString(")")
 
-	return sb.String(), args, nil
+	query := sb.String()
+	if clause := b.buildOutputClause(q.Returning, "inserted"); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // buildFields returns the SQL representation of fields for SQL Server, supporting subqueries and aliases.

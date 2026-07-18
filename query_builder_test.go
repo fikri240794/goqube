@@ -1565,3 +1565,75 @@ func TestDynamicQueryBuilder_nextPlaceholder(t *testing.T) {
 		})
 	}
 }
+
+// TestDynamicQueryBuilder_buildReturningClause tests the buildReturningClause method for various returning column scenarios.
+func TestDynamicQueryBuilder_buildReturningClause(t *testing.T) {
+	dqb := &dynamicQueryBuilder{}
+	tests := []struct {
+		name      string
+		returning []string
+		want      string
+	}{
+		{
+			name:      "empty returning",
+			returning: nil,
+			want:      "",
+		},
+		{
+			name:      "single column",
+			returning: []string{"id"},
+			want:      " RETURNING id",
+		},
+		{
+			name:      "multiple columns",
+			returning: []string{"id", "created_at"},
+			want:      " RETURNING id, created_at",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dqb.buildReturningClause(tt.returning)
+			if got != tt.want {
+				t.Errorf("buildReturningClause() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDynamicQueryBuilder_buildOutputClause tests the buildOutputClause method for various prefix and column scenarios.
+func TestDynamicQueryBuilder_buildOutputClause(t *testing.T) {
+	dqb := &dynamicQueryBuilder{}
+	tests := []struct {
+		name      string
+		returning []string
+		prefix    string
+		want      string
+	}{
+		{
+			name:      "empty returning",
+			returning: nil,
+			prefix:    "inserted",
+			want:      "",
+		},
+		{
+			name:      "single column inserted",
+			returning: []string{"id"},
+			prefix:    "inserted",
+			want:      " OUTPUT inserted.id",
+		},
+		{
+			name:      "multiple columns deleted",
+			returning: []string{"id", "deleted_at"},
+			prefix:    "deleted",
+			want:      " OUTPUT deleted.id, deleted.deleted_at",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dqb.buildOutputClause(tt.returning, tt.prefix)
+			if got != tt.want {
+				t.Errorf("buildOutputClause() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

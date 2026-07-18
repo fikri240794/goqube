@@ -3,8 +3,9 @@ package goqube
 // DeleteQuery represents a SQL DELETE statement with a target table and an optional filter condition.
 // It is used to build parameterized DELETE queries for different SQL dialects.
 type DeleteQuery struct {
-	Table  string  // Table is the name of the table from which to delete data.
-	Filter *Filter // Filter specifies the WHERE condition for the delete operation.
+	Table     string   // Table is the name of the table from which to delete data.
+	Filter    *Filter  // Filter specifies the WHERE condition for the delete operation.
+	Returning []string // Returning is an optional list of column names to return (RETURNING/OUTPUT clause). Supported in PostgreSQL, SQLite, and SQL Server.
 }
 
 // BuildDeleteQuery builds the SQL DELETE statement and its arguments for the specified dialect.

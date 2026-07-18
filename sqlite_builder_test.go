@@ -56,6 +56,27 @@ func Test_sqliteBuilder_BuildDeleteQuery(t *testing.T) {
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
 		},
+		{
+			name: "delete with returning",
+			q: &DeleteQuery{
+				Table:     "users",
+				Filter:    &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning: []string{"id"},
+			},
+			wantSQL:  "DELETE FROM users WHERE id = ? RETURNING id",
+			wantArgs: []interface{}{1},
+			wantErr:  nil,
+		},
+		{
+			name: "delete filter returns error",
+			q: &DeleteQuery{
+				Table:  "users",
+				Filter: &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  ErrInvalidFilter,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -125,6 +146,17 @@ func Test_sqliteBuilder_BuildInsertQuery(t *testing.T) {
 			q:        &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
 			wantSQL:  "INSERT INTO users (id, name) VALUES (?, ?), (?, ?)",
 			wantArgs: []interface{}{1, "foo", 2, "bar"},
+			wantErr:  nil,
+		},
+		{
+			name: "single row with returning",
+			q: &InsertQuery{
+				Table:     "users",
+				Values:    []map[string]interface{}{{"name": "foo"}},
+				Returning: []string{"id"},
+			},
+			wantSQL:  "INSERT INTO users (name) VALUES (?) RETURNING id",
+			wantArgs: []interface{}{"foo"},
 			wantErr:  nil,
 		},
 	}
@@ -325,6 +357,18 @@ func Test_sqliteBuilder_BuildUpdateQuery(t *testing.T) {
 			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"name": "foo"}, Filter: &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}}},
 			wantSQL:  "UPDATE users SET name = ? WHERE id = ?",
 			wantArgs: []interface{}{"foo", 1},
+			wantErr:  nil,
+		},
+		{
+			name: "update with returning",
+			q: &UpdateQuery{
+				Table:       "users",
+				FieldsValue: map[string]interface{}{"name": "bar"},
+				Filter:      &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning:   []string{"id"},
+			},
+			wantSQL:  "UPDATE users SET name = ? WHERE id = ? RETURNING id",
+			wantArgs: []interface{}{"bar", 1},
 			wantErr:  nil,
 		},
 	}
@@ -727,8 +771,20 @@ func Test_sqliteBuilder_BuildBulkUpdateQuery(t *testing.T) {
 			wantSQL:  "UPDATE users SET age = c.age, name = c.name FROM (VALUES (?, ?, ?), (?, ?, ?)) AS c(id, age, name) WHERE users.id = c.id",
 			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
 			wantErr:  false,
-		},
-	}
+		}, {
+			name: "bulk update with returning",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+				Returning: []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE users SET name = c.name FROM (VALUES (?, ?)) AS c(id, name) WHERE users.id = c.id RETURNING id, updated_at",
+			wantArgs: []interface{}{1, "foo"},
+			wantErr:  false,
+		}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, gotArgs, err := b.BuildBulkUpdateQuery(tt.q)

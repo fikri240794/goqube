@@ -382,6 +382,37 @@ func Test_sqlServerBuilder_BuildDeleteQuery(t *testing.T) {
 			wantArgs: []interface{}{1},
 			wantErr:  nil,
 		},
+		{
+			name: "delete with output",
+			q: &DeleteQuery{
+				Table:     "users",
+				Filter:    &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning: []string{"id", "deleted_at"},
+			},
+			wantSQL:  "DELETE FROM users OUTPUT deleted.id, deleted.deleted_at WHERE id = @p0",
+			wantArgs: []interface{}{1},
+			wantErr:  nil,
+		},
+		{
+			name: "delete filter returns error",
+			q: &DeleteQuery{
+				Table:  "users",
+				Filter: &Filter{Field: Field{}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  ErrInvalidFilter,
+		},
+		{
+			name: "delete with output no filter",
+			q: &DeleteQuery{
+				Table:     "users",
+				Returning: []string{"id", "deleted_at"},
+			},
+			wantSQL:  "DELETE FROM users OUTPUT deleted.id, deleted.deleted_at",
+			wantArgs: []interface{}{},
+			wantErr:  nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -455,6 +486,17 @@ func Test_sqlServerBuilder_BuildInsertQuery(t *testing.T) {
 			q:        &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
 			wantSQL:  "INSERT INTO users (id, name) VALUES (@p0, @p1), (@p2, @p3)",
 			wantArgs: []interface{}{1, "foo", 2, "bar"},
+			wantErr:  nil,
+		},
+		{
+			name: "insert with output",
+			q: &InsertQuery{
+				Table:     "users",
+				Values:    []map[string]interface{}{{"name": "foo"}},
+				Returning: []string{"id"},
+			},
+			wantSQL:  "INSERT INTO users (name) OUTPUT inserted.id VALUES (@p0)",
+			wantArgs: []interface{}{"foo"},
 			wantErr:  nil,
 		},
 	}
@@ -707,6 +749,29 @@ func Test_sqlServerBuilder_BuildUpdateQuery(t *testing.T) {
 			q:        &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: nil},
 			wantSQL:  "UPDATE users SET id = @p0",
 			wantArgs: []interface{}{1},
+			wantErr:  nil,
+		},
+		{
+			name: "update with output",
+			q: &UpdateQuery{
+				Table:       "users",
+				FieldsValue: map[string]interface{}{"name": "bar"},
+				Filter:      &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning:   []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE users SET name = @p0 OUTPUT inserted.id, inserted.updated_at WHERE id = @p1",
+			wantArgs: []interface{}{"bar", 1},
+			wantErr:  nil,
+		},
+		{
+			name: "update with output no filter",
+			q: &UpdateQuery{
+				Table:       "users",
+				FieldsValue: map[string]interface{}{"name": "bar"},
+				Returning:   []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE users SET name = @p0 OUTPUT inserted.id, inserted.updated_at",
+			wantArgs: []interface{}{"bar"},
 			wantErr:  nil,
 		},
 	}
@@ -2120,6 +2185,24 @@ func Test_sqlServerBuilder_BuildBulkUpdateQuery(t *testing.T) {
 			},
 			wantSQL:  "UPDATE t SET active = c.active, name = c.name, price = c.price FROM products AS t INNER JOIN (VALUES (CONVERT(int, @p0), CONVERT(bit, @p1), CONVERT(nvarchar(max), @p2), CONVERT(float, @p3)), (CONVERT(int, @p4), CONVERT(bit, @p5), CONVERT(nvarchar(max), @p6), CONVERT(float, @p7))) AS c(id, active, name, price) ON t.id = CONVERT(int, c.id)",
 			wantArgs: []interface{}{1, true, "Widget", 19.99, 2, false, "Gadget", 29.99},
+			wantErr:  false,
+		},
+		{
+			name: "bulk update with output",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo"},
+				},
+				ColumnsType: map[string]string{
+					"id":   "int",
+					"name": "nvarchar(max)",
+				},
+				Returning: []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE t SET name = c.name FROM users AS t INNER JOIN (VALUES (CONVERT(int, @p0), CONVERT(nvarchar(max), @p1))) AS c(id, name) ON t.id = CONVERT(int, c.id) OUTPUT inserted.id, inserted.updated_at",
+			wantArgs: []interface{}{1, "foo"},
 			wantErr:  false,
 		},
 	}

@@ -397,6 +397,17 @@ func TestPostgresBuilder_BuildDeleteQuery(t *testing.T) {
 			wantArgs: nil,
 			wantErr:  true,
 		},
+		{
+			name: "delete with returning",
+			q: &DeleteQuery{
+				Table:     "users",
+				Filter:    &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning: []string{"id", "deleted_at"},
+			},
+			wantSQL:  "DELETE FROM users WHERE id = $1 RETURNING id, deleted_at",
+			wantArgs: []interface{}{1},
+			wantErr:  false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -459,6 +470,28 @@ func TestPostgresBuilder_BuildInsertQuery(t *testing.T) {
 			q:        &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
 			wantSQL:  "INSERT INTO users (id, name) VALUES ($1, $2), ($3, $4)",
 			wantArgs: []interface{}{1, "foo", 2, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "insert with returning single column",
+			q: &InsertQuery{
+				Table:     "users",
+				Values:    []map[string]interface{}{{"name": "foo"}},
+				Returning: []string{"id"},
+			},
+			wantSQL:  "INSERT INTO users (name) VALUES ($1) RETURNING id",
+			wantArgs: []interface{}{"foo"},
+			wantErr:  false,
+		},
+		{
+			name: "insert with returning multiple columns",
+			q: &InsertQuery{
+				Table:     "users",
+				Values:    []map[string]interface{}{{"name": "foo"}},
+				Returning: []string{"id", "created_at"},
+			},
+			wantSQL:  "INSERT INTO users (name) VALUES ($1) RETURNING id, created_at",
+			wantArgs: []interface{}{"foo"},
 			wantErr:  false,
 		},
 	}
@@ -679,6 +712,18 @@ func TestPostgresBuilder_BuildUpdateQuery(t *testing.T) {
 			wantSQL:  "",
 			wantArgs: nil,
 			wantErr:  true,
+		},
+		{
+			name: "update with returning",
+			q: &UpdateQuery{
+				Table:       "users",
+				FieldsValue: map[string]interface{}{"name": "bar"},
+				Filter:      &Filter{Field: Field{Column: "id"}, Operator: OperatorEqual, Value: FilterValue{Value: 1}},
+				Returning:   []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE users SET name = $1 WHERE id = $2 RETURNING id, updated_at",
+			wantArgs: []interface{}{"bar", 1},
+			wantErr:  false,
 		},
 	}
 	for _, tt := range tests {
@@ -1688,6 +1733,25 @@ func TestPostgresBuilder_BuildBulkUpdateQuery(t *testing.T) {
 			},
 			wantSQL:  "UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::bigint, $2::smallint, $3::varchar(100)), ($4::bigint, $5::smallint, $6::varchar(100))) AS c(id, age, name) WHERE t.id = c.id::bigint",
 			wantArgs: []interface{}{1, 30, "foo", 2, 40, "bar"},
+			wantErr:  false,
+		},
+		{
+			name: "bulk update with returning",
+			q: &BulkUpdateQuery{
+				Table:      "users",
+				PrimaryKey: "id",
+				FieldsValues: []map[string]interface{}{
+					{"id": 1, "name": "foo", "age": 30},
+				},
+				ColumnsType: map[string]string{
+					"id":   "integer",
+					"age":  "integer",
+					"name": "text",
+				},
+				Returning: []string{"id", "updated_at"},
+			},
+			wantSQL:  "UPDATE users AS t SET age = c.age, name = c.name FROM (VALUES ($1::integer, $2::integer, $3::text)) AS c(id, age, name) WHERE t.id = c.id::integer RETURNING id, updated_at",
+			wantArgs: []interface{}{1, 30, "foo"},
 			wantErr:  false,
 		},
 		{

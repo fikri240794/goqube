@@ -5,6 +5,7 @@ package goqube
 type UpdateQuery struct {
 	FieldsValue map[string]interface{} // FieldsValue maps column names to their new values.
 	Filter      *Filter                // Filter specifies the WHERE condition for the update.
+	Returning   []string               // Returning is an optional list of column names to return (RETURNING/OUTPUT clause). Supported in PostgreSQL, SQLite, and SQL Server.
 	Table       string                 // Table is the name of the table to update.
 }
 

@@ -3,8 +3,9 @@ package goqube
 // InsertQuery represents a SQL INSERT statement with a target table and values to insert.
 // It is used to build parameterized INSERT queries for different SQL dialects.
 type InsertQuery struct {
-	Table  string                   // Table is the name of the table to insert data into.
-	Values []map[string]interface{} // Values is a slice of maps, each representing a row to insert.
+	Table     string                   // Table is the name of the table to insert data into.
+	Values    []map[string]interface{} // Values is a slice of maps, each representing a row to insert.
+	Returning []string                 // Returning is an optional list of column names to return (RETURNING/OUTPUT clause). Supported in PostgreSQL, SQLite, and SQL Server.
 }
 
 // BuildInsertQuery builds the SQL INSERT statement and its arguments for the specified dialect.

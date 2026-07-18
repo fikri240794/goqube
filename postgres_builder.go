@@ -70,14 +70,28 @@ func (b *postgresBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface{
 	paramIndex := 1
 
 	// Use closure to capture paramIndex for consistent placeholder generation
-	return b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
+	query, argsOut, err := b.buildDeleteQuery(q.Table, q.Filter, &args, func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, &paramIndex, true)
 	})
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, argsOut, nil
 }
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for PostgreSQL.
 func (b *postgresBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	return b.buildInsertQuery(q, 1, b.nextPlaceholder)
+	query, args, err := b.buildInsertQuery(q, 1, b.nextPlaceholder)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // BuildSelectQuery builds a SQL SELECT statement and its arguments for PostgreSQL.
@@ -189,7 +203,14 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for PostgreSQL.
 func (b *postgresBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
-	return b.buildUpdateQueryWithContinuousIndex(q, 1, b.nextPlaceholder, b.buildFilter)
+	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 1, b.nextPlaceholder, b.buildFilter)
+	if err != nil {
+		return "", nil, err
+	}
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // BuildBulkUpdateQuery builds a SQL bulk UPDATE statement and its arguments for PostgreSQL.
@@ -289,7 +310,11 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 	sb.WriteString("::")
 	sb.WriteString(pkType)
 
-	return sb.String(), args, nil
+	query := sb.String()
+	if clause := b.buildReturningClause(q.Returning); clause != "" {
+		query += clause
+	}
+	return query, args, nil
 }
 
 // buildFieldForFilter returns the SQL representation of a field for use in filter conditions in PostgreSQL.

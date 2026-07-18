@@ -71,6 +71,23 @@ func main() {
 		complexDelete(d.dialect)
 		fmt.Println()
 
+		// INSERT with RETURNING (not supported in MySQL)
+		if d.dialect != goqube.DialectMySQL {
+			fmt.Println("10. INSERT with RETURNING:")
+			insertWithReturning(d.dialect)
+			fmt.Println()
+
+			// UPDATE with RETURNING
+			fmt.Println("11. UPDATE with RETURNING:")
+			updateWithReturning(d.dialect)
+			fmt.Println()
+
+			// DELETE with RETURNING
+			fmt.Println("12. DELETE with RETURNING:")
+			deleteWithReturning(d.dialect)
+			fmt.Println()
+		}
+
 		fmt.Println("=" + fmt.Sprintf("%*s", len(d.name)+20, "="))
 		fmt.Println()
 	}
@@ -406,6 +423,73 @@ func complexDelete(dialect goqube.Dialect) {
 				},
 			},
 		},
+	}
+
+	sql, args, err := query.BuildDeleteQuery(dialect)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+
+	fmt.Printf("SQL: %s\n", sql)
+	fmt.Printf("Args: %v\n", args)
+}
+
+// INSERT with RETURNING example
+func insertWithReturning(dialect goqube.Dialect) {
+	query := &goqube.InsertQuery{
+		Table: "users",
+		Values: []map[string]interface{}{
+			{"name": "John Doe", "email": "john@example.com"},
+		},
+		Returning: []string{"id", "created_at"},
+	}
+
+	sql, args, err := query.BuildInsertQuery(dialect)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+
+	fmt.Printf("SQL: %s\n", sql)
+	fmt.Printf("Args: %v\n", args)
+}
+
+// UPDATE with RETURNING example
+func updateWithReturning(dialect goqube.Dialect) {
+	query := &goqube.UpdateQuery{
+		Table: "users",
+		FieldsValue: map[string]interface{}{
+			"name": "Jane Doe",
+		},
+		Filter: &goqube.Filter{
+			Field:    goqube.Field{Column: "id"},
+			Operator: goqube.OperatorEqual,
+			Value:    goqube.FilterValue{Value: 1},
+		},
+		Returning: []string{"id", "updated_at"},
+	}
+
+	sql, args, err := query.BuildUpdateQuery(dialect)
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+
+	fmt.Printf("SQL: %s\n", sql)
+	fmt.Printf("Args: %v\n", args)
+}
+
+// DELETE with RETURNING example
+func deleteWithReturning(dialect goqube.Dialect) {
+	query := &goqube.DeleteQuery{
+		Table: "users",
+		Filter: &goqube.Filter{
+			Field:    goqube.Field{Column: "id"},
+			Operator: goqube.OperatorEqual,
+			Value:    goqube.FilterValue{Value: 123},
+		},
+		Returning: []string{"id", "deleted_at"},
 	}
 
 	sql, args, err := query.BuildDeleteQuery(dialect)

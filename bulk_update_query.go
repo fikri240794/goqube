@@ -12,6 +12,7 @@ type BulkUpdateQuery struct {
 	PrimaryKey   string                   // PrimaryKey is the column name used to identify existing records.
 	FieldsValues []map[string]interface{} // FieldsValues is a slice of maps, each representing a row to update including its primary key.
 	ColumnsType  map[string]string        // ColumnsType maps column names to SQL type names (e.g., "id" -> "integer", "name" -> "text"). Required for PostgreSQL and SQL Server.
+	Returning    []string                 // Returning is an optional list of column names to return (RETURNING/OUTPUT clause). Supported in PostgreSQL, SQLite, and SQL Server.
 }
 
 // BuildBulkUpdateQuery builds the SQL UPDATE statement and its arguments for the specified dialect.
