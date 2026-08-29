@@ -1,10 +1,10 @@
 package goqube
 
 import (
-	"fmt"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -31,10 +31,12 @@ func (b *postgresBuilder) adjustRawQueryPlaceholders(rawSQL string, rawArgs []in
 	re := regexp.MustCompile(`\$(\d+)`)
 	adjustedSQL := re.ReplaceAllStringFunc(rawSQL, func(match string) string {
 		// Extract the original placeholder number
-		var originalIndex int
-		fmt.Sscanf(match[1:], "%d", &originalIndex)
+		originalIndex, _ := strconv.Atoi(match[1:])
 		// Map $1 -> $startIndex, $2 -> $startIndex+1, etc.
-		return fmt.Sprintf("$%d", startIndex+originalIndex-1)
+		buf := make([]byte, 0, 8)
+		buf = append(buf, '$')
+		buf = strconv.AppendInt(buf, int64(startIndex+originalIndex-1), 10)
+		return string(buf)
 	})
 
 	// Advance the parameter index by the number of arguments
@@ -84,7 +86,7 @@ func (b *postgresBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface{
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for PostgreSQL.
 func (b *postgresBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	query, args, err := b.buildInsertQuery(q, 1, b.nextPlaceholder)
+	query, args, err := b.buildInsertQuery(q, 1, "$%d")
 	if err != nil {
 		return "", nil, err
 	}
@@ -107,10 +109,10 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
 	args := make([]interface{}, 0, 16)
-	var sb strings.Builder
+	buf := make([]byte, 0, 128)
 	paramIndex := 1
 
-	sb.WriteString("SELECT ")
+	buf = append(buf, "SELECT "...)
 
 	fields, err := b.buildFields(q.Fields, &args, func(sq *SelectQuery) (string, []interface{}, error) {
 		return b.buildSelectQueryWithParamIndex(sq, &paramIndex)
@@ -118,14 +120,14 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(fields)
+	buf = append(buf, fields...)
 
 	table, err := b.buildTableWithParamIndex(q.Table, &args, &paramIndex)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(table)
+	buf = append(buf, " FROM "...)
+	buf = append(buf, table...)
 
 	// Process JOINs only if they exist
 	if len(q.Joins) > 0 {
@@ -142,8 +144,8 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ")
-		sb.WriteString(joins)
+		buf = append(buf, ' ')
+		buf = append(buf, joins...)
 	}
 
 	// Process WHERE clause only if filter exists and produces content
@@ -153,8 +155,8 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 			return "", nil, err
 		}
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
@@ -164,8 +166,8 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(groupBy)
+		buf = append(buf, " GROUP BY "...)
+		buf = append(buf, groupBy...)
 	}
 
 	// Process ORDER BY only if sorting is specified
@@ -174,36 +176,45 @@ func (b *postgresBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBy)
+		buf = append(buf, " ORDER BY "...)
+		buf = append(buf, orderBy...)
 	}
 
 	// Add pagination clauses using direct string building for better performance
 	if q.Take > 0 {
-		sb.WriteString(" LIMIT $")
-		sb.WriteString(fmt.Sprintf("%d", paramIndex))
+		buf = append(buf, " LIMIT $"...)
+		buf = strconv.AppendInt(buf, int64(paramIndex), 10)
 		args = append(args, int64(q.Take))
 		paramIndex++
 	}
 
 	if q.Skip > 0 {
-		sb.WriteString(" OFFSET $")
-		sb.WriteString(fmt.Sprintf("%d", paramIndex))
+		buf = append(buf, " OFFSET $"...)
+		buf = strconv.AppendInt(buf, int64(paramIndex), 10)
 		args = append(args, int64(q.Skip))
 		paramIndex++
 	}
 
 	// Handle aliasing with optimized string building
 	if q.Alias != "" {
-		return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sb.String()), q.Alias), args, nil
+		sqlStr := strings.TrimSpace(string(buf))
+		out := make([]byte, 0, len(sqlStr)+len(q.Alias)+6)
+		out = append(out, '(')
+		out = append(out, sqlStr...)
+		out = append(out, ") AS "...)
+		out = append(out, q.Alias...)
+		return string(out), args, nil
 	}
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for PostgreSQL.
 func (b *postgresBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
-	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 1, b.nextPlaceholder, b.buildFilter)
+	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 1, "$%d", func(f *Filter, args *[]interface{}, idx int, isRoot bool) (string, int, error) {
+		where, err := b.buildFilter(f, args, &idx, isRoot)
+		return where, idx, err
+	})
 	if err != nil {
 		return "", nil, err
 	}
@@ -249,8 +260,7 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 		}
 	}
 
-	// Preallocate placeholders and args
-	var valuesRows []string
+	// Preallocate args and the query buffer
 	var args []interface{}
 	paramIndex := 1
 
@@ -260,57 +270,68 @@ func (b *postgresBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []in
 		colTypes[col] = q.ColumnsType[col]
 	}
 
-	for _, row := range q.FieldsValues {
+	buf := make([]byte, 0, 128)
+	buf = append(buf, "UPDATE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " AS t SET "...)
+
+	for i, col := range columns {
+		if i > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, col...)
+		buf = append(buf, " = c."...)
+		buf = append(buf, col...)
+	}
+
+	buf = append(buf, " FROM (VALUES "...)
+
+	for ri, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
 		if !ok {
 			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
 		}
 
-		var rowPlaceholders []string
+		if ri > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, '(')
 
 		// Add primary key first with type cast (PostgreSQL requires ::type for VALUES placeholders)
 		args = append(args, pkVal)
-		rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d::%s", paramIndex, pkType))
+		buf = append(buf, '$')
+		buf = strconv.AppendInt(buf, int64(paramIndex), 10)
+		buf = append(buf, "::"...)
+		buf = append(buf, pkType...)
 		paramIndex++
 
 		// Add other columns with type cast
 		for _, col := range columns {
 			args = append(args, row[col])
-			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("$%d::%s", paramIndex, colTypes[col]))
+			buf = append(buf, ", $"...)
+			buf = strconv.AppendInt(buf, int64(paramIndex), 10)
+			buf = append(buf, "::"...)
+			buf = append(buf, colTypes[col]...)
 			paramIndex++
 		}
 
-		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+		buf = append(buf, ')')
 	}
 
-	var sb strings.Builder
-	sb.WriteString("UPDATE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" AS t SET ")
-
-	setParts := make([]string, len(columns))
-	for i, col := range columns {
-		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
+	buf = append(buf, ") AS c("...)
+	buf = append(buf, q.PrimaryKey...)
+	for _, col := range columns {
+		buf = append(buf, ", "...)
+		buf = append(buf, col...)
 	}
-	sb.WriteString(strings.Join(setParts, ", "))
+	buf = append(buf, ") WHERE t."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, " = c."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, "::"...)
+	buf = append(buf, pkType...)
 
-	sb.WriteString(" FROM (VALUES ")
-	sb.WriteString(strings.Join(valuesRows, ", "))
-	sb.WriteString(") AS c(")
-
-	cColumns := make([]string, 0, len(columns)+1)
-	cColumns = append(cColumns, q.PrimaryKey)
-	cColumns = append(cColumns, columns...)
-	sb.WriteString(strings.Join(cColumns, ", "))
-
-	sb.WriteString(") WHERE t.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" = c.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString("::")
-	sb.WriteString(pkType)
-
-	query := sb.String()
+	query := string(buf)
 	if clause := b.buildReturningClause(q.Returning); clause != "" {
 		query += clause
 	}
@@ -325,13 +346,27 @@ func (b *postgresBuilder) buildFieldForFilter(f Field) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		sub = strings.TrimSpace(sub)
 		if f.Alias != "" {
-			return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sub), f.Alias), nil
+			buf := make([]byte, 0, len(sub)+len(f.Alias)+6)
+			buf = append(buf, '(')
+			buf = append(buf, sub...)
+			buf = append(buf, ") AS "...)
+			buf = append(buf, f.Alias...)
+			return string(buf), nil
 		}
-		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+		buf := make([]byte, 0, len(sub)+2)
+		buf = append(buf, '(')
+		buf = append(buf, sub...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else if f.Table != "" && f.Column != "" {
 		// If both table and column are set, return a qualified column name.
-		return fmt.Sprintf("%s.%s", f.Table, f.Column), nil
+		buf := make([]byte, 0, len(f.Table)+len(f.Column)+1)
+		buf = append(buf, f.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, f.Column...)
+		return string(buf), nil
 	} else if f.Column != "" {
 		// If only column is set, return the column name.
 		return f.Column, nil
@@ -348,8 +383,8 @@ func (b *postgresBuilder) buildFilter(f *Filter, args *[]interface{}, paramIndex
 	if len(f.Filters) > 0 {
 		// Preallocate parts slice for better memory efficiency with nested filters
 		parts := make([]string, 0, len(f.Filters))
-		for _, sub := range f.Filters {
-			part, err := b.buildFilter(&sub, args, paramIndex, false)
+		for i := range f.Filters {
+			part, err := b.buildFilter(&f.Filters[i], args, paramIndex, false)
 			if err != nil {
 				return "", err
 			}
@@ -357,7 +392,12 @@ func (b *postgresBuilder) buildFilter(f *Filter, args *[]interface{}, paramIndex
 				parts = append(parts, part)
 			}
 		}
-		joined := strings.Join(parts, fmt.Sprintf(" %s ", f.Logic))
+		// Build the " LOGIC " separator without fmt to avoid escape-to-heap
+		sepBuf := make([]byte, 0, len(f.Logic)+2)
+		sepBuf = append(sepBuf, ' ')
+		sepBuf = append(sepBuf, f.Logic...)
+		sepBuf = append(sepBuf, ' ')
+		joined := strings.Join(parts, string(sepBuf))
 		// Optimize space normalization with strings.ReplaceAll for better performance
 		for strings.Contains(joined, "  ") {
 			joined = strings.ReplaceAll(joined, "  ", " ")
@@ -366,7 +406,11 @@ func (b *postgresBuilder) buildFilter(f *Filter, args *[]interface{}, paramIndex
 		if isRoot {
 			return joined, nil
 		}
-		return fmt.Sprintf("(%s)", joined), nil
+		buf := make([]byte, 0, len(joined)+2)
+		buf = append(buf, '(')
+		buf = append(buf, joined...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	}
 	fieldStr, err := b.buildFieldForFilter(f.Field)
 	if err != nil {
@@ -384,7 +428,14 @@ func (b *postgresBuilder) buildFilter(f *Filter, args *[]interface{}, paramIndex
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s %s %s", fieldStr, operator, valueStr), nil
+	// Build "field op value" in a single buffer without fmt
+	buf := make([]byte, 0, len(fieldStr)+len(operator)+len(valueStr)+2)
+	buf = append(buf, fieldStr...)
+	buf = append(buf, ' ')
+	buf = append(buf, operator...)
+	buf = append(buf, ' ')
+	buf = append(buf, valueStr...)
+	return string(buf), nil
 }
 
 // buildFilterValue returns the SQL representation of a filter value for use in WHERE or HAVING clauses in PostgreSQL.
@@ -399,9 +450,18 @@ func (b *postgresBuilder) buildFilterValue(op Operator, v FilterValue, args *[]i
 			return "", err
 		}
 		*args = append(*args, subArgs...)
-		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+		sub = strings.TrimSpace(sub)
+		buf := make([]byte, 0, len(sub)+2)
+		buf = append(buf, '(')
+		buf = append(buf, sub...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else if v.Table != "" && v.Column != "" {
-		return v.Table + "." + v.Column, nil
+		buf := make([]byte, 0, len(v.Table)+len(v.Column)+1)
+		buf = append(buf, v.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, v.Column...)
+		return string(buf), nil
 	} else if v.Column != "" {
 		return v.Column, nil
 	} else if op == OperatorIsNull || op == OperatorIsNotNull {
@@ -415,20 +475,27 @@ func (b *postgresBuilder) buildFilterValue(op Operator, v FilterValue, args *[]i
 		if valLen == 0 {
 			return "", ErrOperatorArrayEmpty
 		}
-		// Preallocate slice with exact size for better performance
-		placeholders := make([]string, valLen)
+		// Build the parenthesized placeholder list in one buffer
+		buf := make([]byte, 0, 2+valLen*6)
+		buf = append(buf, '(')
 		for i := 0; i < valLen; i++ {
 			*args = append(*args, val.Index(i).Interface())
-			placeholders[i] = fmt.Sprintf("$%d", *paramIndex)
+			if i > 0 {
+				buf = append(buf, ", "...)
+			}
+			buf = append(buf, '$')
+			buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
 			(*paramIndex)++
 		}
-		// Avoid TrimSpace call since strings.Join doesn't produce extra spaces
-		return fmt.Sprintf("(%s)", strings.Join(placeholders, ", ")), nil
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else {
 		*args = append(*args, v.Value)
-		placeholder := fmt.Sprintf("$%d", *paramIndex)
+		buf := make([]byte, 0, 8)
+		buf = append(buf, '$')
+		buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
 		(*paramIndex)++
-		return placeholder, nil
+		return string(buf), nil
 	}
 }
 
@@ -440,20 +507,30 @@ func (b *postgresBuilder) buildFilterValueLike(v FilterValue, args *[]interface{
 			return "", err
 		}
 		*args = append(*args, subArgs...)
-		placeholder := "($" + fmt.Sprintf("%d", *paramIndex) + ")"
+		buf := make([]byte, 0, 8)
+		buf = append(buf, '(')
+		buf = append(buf, '$')
+		buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
+		buf = append(buf, ')')
 		(*paramIndex)++
-		return placeholder, nil
+		return string(buf), nil
 	} else if v.Table != "" && v.Column != "" {
-		return v.Table + "." + v.Column, nil
+		buf := make([]byte, 0, len(v.Table)+len(v.Column)+1)
+		buf = append(buf, v.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, v.Column...)
+		return string(buf), nil
 	} else if v.Value != nil {
 		strVal, ok := v.Value.(string)
 		if !ok {
 			return "", ErrLikeValueType
 		}
 		*args = append(*args, "%"+strVal+"%")
-		placeholder := "$" + fmt.Sprintf("%d", *paramIndex)
+		buf := make([]byte, 0, 8)
+		buf = append(buf, '$')
+		buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
 		(*paramIndex)++
-		return placeholder, nil
+		return string(buf), nil
 	} else {
 		return "", ErrLikeValueTypeOrSubquery
 	}
@@ -489,9 +566,4 @@ func (b *postgresBuilder) buildTableWithParamIndex(t Table, args *[]interface{},
 	return b.dynamicQueryBuilder.buildTable(t, args, func(sq *SelectQuery) (string, []interface{}, error) {
 		return b.buildSelectQueryWithParamIndex(sq, paramIndex)
 	})
-}
-
-// nextPlaceholder generates the next indexed parameter placeholder (e.g., $1, $2) for PostgreSQL queries.
-func (b *postgresBuilder) nextPlaceholder(paramIndex *int) string {
-	return b.dynamicQueryBuilder.nextPlaceholder(paramIndex)
 }

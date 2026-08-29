@@ -1,7 +1,6 @@
 package goqube
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 )
@@ -40,7 +39,7 @@ func (b *sqliteBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface{},
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for SQLite.
 func (b *sqliteBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	query, args, err := b.buildInsertQuery(q, 0, nil)
+	query, args, err := b.buildInsertQuery(q, 0, "?")
 	if err != nil {
 		return "", nil, err
 	}
@@ -63,21 +62,21 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
 	args := make([]interface{}, 0, 16)
-	var sb strings.Builder
-	sb.WriteString("SELECT ")
+	buf := make([]byte, 0, 128)
+	buf = append(buf, "SELECT "...)
 
 	fields, err := b.buildFields(q.Fields, &args)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(fields)
+	buf = append(buf, fields...)
 
 	table, err := b.buildTable(q.Table, &args)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(table)
+	buf = append(buf, " FROM "...)
+	buf = append(buf, table...)
 
 	// Process JOINs only if they exist
 	if len(q.Joins) > 0 {
@@ -85,8 +84,8 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ")
-		sb.WriteString(joins)
+		buf = append(buf, " "...)
+		buf = append(buf, joins...)
 	}
 
 	// Process WHERE clause only if filter exists and produces content
@@ -96,8 +95,8 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 			return "", nil, err
 		}
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
@@ -107,8 +106,8 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(groupBy)
+		buf = append(buf, " GROUP BY "...)
+		buf = append(buf, groupBy...)
 	}
 
 	// Process ORDER BY only if sorting is specified
@@ -117,28 +116,34 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBy)
+		buf = append(buf, " ORDER BY "...)
+		buf = append(buf, orderBy...)
 	}
 
 	// Add pagination clauses only when needed
 	if q.Take > 0 {
-		sb.WriteString(" LIMIT ?")
+		buf = append(buf, " LIMIT ?"...)
 		args = append(args, int64(q.Take))
 	}
 
 	if q.Skip > 0 {
-		sb.WriteString(" OFFSET ?")
+		buf = append(buf, " OFFSET ?"...)
 		args = append(args, int64(q.Skip))
 	}
 
 	// Handle aliasing with optimized string building
 	if q.Alias != "" {
-		return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sb.String()), q.Alias), args, nil
+		trimmed := strings.TrimSpace(string(buf))
+		aliasBuf := make([]byte, 0, len(trimmed)+len(q.Alias)+8)
+		aliasBuf = append(aliasBuf, "("...)
+		aliasBuf = append(aliasBuf, trimmed...)
+		aliasBuf = append(aliasBuf, ") AS "...)
+		aliasBuf = append(aliasBuf, q.Alias...)
+		return string(aliasBuf), args, nil
 	}
 
 	// SQLite-specific whitespace normalization for optimal compatibility
-	query := sb.String()
+	query := string(buf)
 	query = strings.ReplaceAll(query, "\n", " ")
 	query = strings.ReplaceAll(query, "\t", " ")
 	query = strings.Join(strings.Fields(query), " ")
@@ -148,7 +153,7 @@ func (b *sqliteBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{},
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for SQLite.
 func (b *sqliteBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
 	// Build the UPDATE query using the provided filter builder for complex WHERE logic.
-	query, args, err := b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
+	query, args, err := b.buildUpdateQuery(q, "?", func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
 	if err != nil {
@@ -181,56 +186,56 @@ func (b *sqliteBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inte
 		return "", nil, ErrInvalidBulkUpdateQuery
 	}
 
-	var valuesRows []string
 	var args []interface{}
+	buf := make([]byte, 0, 64)
 
-	for _, row := range q.FieldsValues {
+	// Build "UPDATE <table> SET <col> = c.<col>, ... FROM (VALUES "
+	buf = append(buf, "UPDATE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " SET "...)
+	for i, col := range columns {
+		if i > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, col...)
+		buf = append(buf, " = c."...)
+		buf = append(buf, col...)
+	}
+	buf = append(buf, " FROM (VALUES "...)
+
+	for ri, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
 		if !ok {
 			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
 		}
-
-		var rowPlaceholders []string
-
 		args = append(args, pkVal)
-		rowPlaceholders = append(rowPlaceholders, "?")
 
+		if ri > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, "("...)
+		buf = append(buf, "?"...)
 		for _, col := range columns {
 			args = append(args, row[col])
-			rowPlaceholders = append(rowPlaceholders, "?")
+			buf = append(buf, ", ?"...)
 		}
-
-		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+		buf = append(buf, ")"...)
 	}
 
-	var sb strings.Builder
-	sb.WriteString("UPDATE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" SET ")
-
-	setParts := make([]string, len(columns))
-	for i, col := range columns {
-		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
+	buf = append(buf, ") AS c("...)
+	buf = append(buf, q.PrimaryKey...)
+	for _, col := range columns {
+		buf = append(buf, ", "...)
+		buf = append(buf, col...)
 	}
-	sb.WriteString(strings.Join(setParts, ", "))
+	buf = append(buf, ") WHERE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, "."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, " = c."...)
+	buf = append(buf, q.PrimaryKey...)
 
-	sb.WriteString(" FROM (VALUES ")
-	sb.WriteString(strings.Join(valuesRows, ", "))
-	sb.WriteString(") AS c(")
-
-	cColumns := make([]string, 0, len(columns)+1)
-	cColumns = append(cColumns, q.PrimaryKey)
-	cColumns = append(cColumns, columns...)
-	sb.WriteString(strings.Join(cColumns, ", "))
-
-	sb.WriteString(") WHERE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(".")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" = c.")
-	sb.WriteString(q.PrimaryKey)
-
-	query := sb.String()
+	query := string(buf)
 	if clause := b.buildReturningClause(q.Returning); clause != "" {
 		query += clause
 	}

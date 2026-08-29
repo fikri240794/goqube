@@ -28,63 +28,63 @@ func main() {
 
 		// Simple SELECT
 		fmt.Println("1. Simple SELECT:")
-		simpleSelect(d.dialect)
+		simpleSelect(d.dialect, false)
 		fmt.Println()
 
 		// Complex SELECT with JOINs
 		fmt.Println("2. Complex SELECT with JOINs:")
-		complexSelect(d.dialect)
+		complexSelect(d.dialect, false)
 		fmt.Println()
 
 		// Simple INSERT
 		fmt.Println("3. Simple INSERT:")
-		simpleInsert(d.dialect)
+		simpleInsert(d.dialect, false)
 		fmt.Println()
 
 		// Batch INSERT
 		fmt.Println("4. Batch INSERT:")
-		batchInsert(d.dialect)
+		batchInsert(d.dialect, false)
 		fmt.Println()
 
 		// Simple UPDATE
 		fmt.Println("5. Simple UPDATE:")
-		simpleUpdate(d.dialect)
+		simpleUpdate(d.dialect, false)
 		fmt.Println()
 
 		// Complex UPDATE with subquery
 		fmt.Println("6. Complex UPDATE:")
-		complexUpdate(d.dialect)
+		complexUpdate(d.dialect, false)
 		fmt.Println()
 
 		// Bulk UPDATE
 		fmt.Println("7. Bulk UPDATE:")
-		bulkUpdate(d.dialect)
+		bulkUpdate(d.dialect, false)
 		fmt.Println()
 
 		// Simple DELETE
 		fmt.Println("8. Simple DELETE:")
-		simpleDelete(d.dialect)
+		simpleDelete(d.dialect, false)
 		fmt.Println()
 
 		// Complex DELETE with multiple conditions
 		fmt.Println("9. Complex DELETE:")
-		complexDelete(d.dialect)
+		complexDelete(d.dialect, false)
 		fmt.Println()
 
 		// INSERT with RETURNING (not supported in MySQL)
 		if d.dialect != goqube.DialectMySQL {
 			fmt.Println("10. INSERT with RETURNING:")
-			insertWithReturning(d.dialect)
+			insertWithReturning(d.dialect, false)
 			fmt.Println()
 
 			// UPDATE with RETURNING
 			fmt.Println("11. UPDATE with RETURNING:")
-			updateWithReturning(d.dialect)
+			updateWithReturning(d.dialect, false)
 			fmt.Println()
 
 			// DELETE with RETURNING
 			fmt.Println("12. DELETE with RETURNING:")
-			deleteWithReturning(d.dialect)
+			deleteWithReturning(d.dialect, false)
 			fmt.Println()
 		}
 
@@ -93,8 +93,9 @@ func main() {
 	}
 }
 
-// Simple SELECT example
-func simpleSelect(dialect goqube.Dialect) {
+// Simple SELECT example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func simpleSelect(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.SelectQuery{
 		Fields: []goqube.Field{
 			{Column: "id"},
@@ -114,6 +115,11 @@ func simpleSelect(dialect goqube.Dialect) {
 		Skip: 5,
 	}
 
+	if triggerError {
+		// Empty query: no table, so the builder returns ErrInvalidTable on every dialect.
+		query = &goqube.SelectQuery{}
+	}
+
 	sql, args, err := query.BuildSelectQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -124,8 +130,9 @@ func simpleSelect(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Complex SELECT with JOINs example
-func complexSelect(dialect goqube.Dialect) {
+// Complex SELECT with JOINs example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func complexSelect(dialect goqube.Dialect, triggerError bool) {
 	// Define dialect-specific raw queries and placeholders
 	var (
 		commentCountQuery    string
@@ -245,6 +252,11 @@ func complexSelect(dialect goqube.Dialect) {
 		Take: 20,
 	}
 
+	if triggerError {
+		// Empty query: no table, so the builder returns ErrInvalidTable on every dialect.
+		query = &goqube.SelectQuery{}
+	}
+
 	sql, args, err := query.BuildSelectQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -255,8 +267,9 @@ func complexSelect(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Simple INSERT example
-func simpleInsert(dialect goqube.Dialect) {
+// Simple INSERT example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func simpleInsert(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.InsertQuery{
 		Table: "users",
 		Values: []map[string]interface{}{
@@ -269,6 +282,11 @@ func simpleInsert(dialect goqube.Dialect) {
 		},
 	}
 
+	if triggerError {
+		// Empty query: missing table and values, so the builder returns ErrInvalidInsertQuery.
+		query = &goqube.InsertQuery{}
+	}
+
 	sql, args, err := query.BuildInsertQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -279,8 +297,9 @@ func simpleInsert(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Batch INSERT example
-func batchInsert(dialect goqube.Dialect) {
+// Batch INSERT example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func batchInsert(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.InsertQuery{
 		Table: "products",
 		Values: []map[string]interface{}{
@@ -291,6 +310,11 @@ func batchInsert(dialect goqube.Dialect) {
 		},
 	}
 
+	if triggerError {
+		// Empty query: missing table and values, so the builder returns ErrInvalidInsertQuery.
+		query = &goqube.InsertQuery{}
+	}
+
 	sql, args, err := query.BuildInsertQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -301,8 +325,9 @@ func batchInsert(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Simple UPDATE example
-func simpleUpdate(dialect goqube.Dialect) {
+// Simple UPDATE example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func simpleUpdate(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.UpdateQuery{
 		Table: "users",
 		FieldsValue: map[string]interface{}{
@@ -317,6 +342,11 @@ func simpleUpdate(dialect goqube.Dialect) {
 		},
 	}
 
+	if triggerError {
+		// Empty query: missing table and fields, so the builder returns ErrInvalidUpdateQuery.
+		query = &goqube.UpdateQuery{}
+	}
+
 	sql, args, err := query.BuildUpdateQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -327,8 +357,9 @@ func simpleUpdate(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Complex UPDATE with subquery example
-func complexUpdate(dialect goqube.Dialect) {
+// Complex UPDATE with subquery example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func complexUpdate(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.UpdateQuery{
 		Table: "users",
 		FieldsValue: map[string]interface{}{
@@ -358,6 +389,11 @@ func complexUpdate(dialect goqube.Dialect) {
 		},
 	}
 
+	if triggerError {
+		// Empty query: missing table and fields, so the builder returns ErrInvalidUpdateQuery.
+		query = &goqube.UpdateQuery{}
+	}
+
 	sql, args, err := query.BuildUpdateQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -368,8 +404,9 @@ func complexUpdate(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Simple DELETE example
-func simpleDelete(dialect goqube.Dialect) {
+// Simple DELETE example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func simpleDelete(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.DeleteQuery{
 		Table: "users",
 		Filter: &goqube.Filter{
@@ -377,6 +414,11 @@ func simpleDelete(dialect goqube.Dialect) {
 			Operator: goqube.OperatorEqual,
 			Value:    goqube.FilterValue{Value: 123},
 		},
+	}
+
+	if triggerError {
+		// Empty query: missing table, so the builder returns ErrInvalidDeleteQuery.
+		query = &goqube.DeleteQuery{}
 	}
 
 	sql, args, err := query.BuildDeleteQuery(dialect)
@@ -389,8 +431,9 @@ func simpleDelete(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Complex DELETE with multiple conditions example
-func complexDelete(dialect goqube.Dialect) {
+// Complex DELETE with multiple conditions example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func complexDelete(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.DeleteQuery{
 		Table: "logs",
 		Filter: &goqube.Filter{
@@ -425,6 +468,11 @@ func complexDelete(dialect goqube.Dialect) {
 		},
 	}
 
+	if triggerError {
+		// Empty query: missing table, so the builder returns ErrInvalidDeleteQuery.
+		query = &goqube.DeleteQuery{}
+	}
+
 	sql, args, err := query.BuildDeleteQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -435,14 +483,20 @@ func complexDelete(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// INSERT with RETURNING example
-func insertWithReturning(dialect goqube.Dialect) {
+// INSERT with RETURNING example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func insertWithReturning(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.InsertQuery{
 		Table: "users",
 		Values: []map[string]interface{}{
 			{"name": "John Doe", "email": "john@example.com"},
 		},
 		Returning: []string{"id", "created_at"},
+	}
+
+	if triggerError {
+		// Empty query: missing table and values, so the builder returns ErrInvalidInsertQuery.
+		query = &goqube.InsertQuery{}
 	}
 
 	sql, args, err := query.BuildInsertQuery(dialect)
@@ -455,8 +509,9 @@ func insertWithReturning(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// UPDATE with RETURNING example
-func updateWithReturning(dialect goqube.Dialect) {
+// UPDATE with RETURNING example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func updateWithReturning(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.UpdateQuery{
 		Table: "users",
 		FieldsValue: map[string]interface{}{
@@ -470,6 +525,11 @@ func updateWithReturning(dialect goqube.Dialect) {
 		Returning: []string{"id", "updated_at"},
 	}
 
+	if triggerError {
+		// Empty query: missing table and fields, so the builder returns ErrInvalidUpdateQuery.
+		query = &goqube.UpdateQuery{}
+	}
+
 	sql, args, err := query.BuildUpdateQuery(dialect)
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -480,8 +540,9 @@ func updateWithReturning(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// DELETE with RETURNING example
-func deleteWithReturning(dialect goqube.Dialect) {
+// DELETE with RETURNING example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func deleteWithReturning(dialect goqube.Dialect, triggerError bool) {
 	query := &goqube.DeleteQuery{
 		Table: "users",
 		Filter: &goqube.Filter{
@@ -490,6 +551,11 @@ func deleteWithReturning(dialect goqube.Dialect) {
 			Value:    goqube.FilterValue{Value: 123},
 		},
 		Returning: []string{"id", "deleted_at"},
+	}
+
+	if triggerError {
+		// Empty query: missing table, so the builder returns ErrInvalidDeleteQuery.
+		query = &goqube.DeleteQuery{}
 	}
 
 	sql, args, err := query.BuildDeleteQuery(dialect)
@@ -502,8 +568,9 @@ func deleteWithReturning(dialect goqube.Dialect) {
 	fmt.Printf("Args: %v\n", args)
 }
 
-// Bulk UPDATE example
-func bulkUpdate(dialect goqube.Dialect) {
+// Bulk UPDATE example.
+// When triggerError is true, an invalid query is built so the error branch runs.
+func bulkUpdate(dialect goqube.Dialect, triggerError bool) {
 	// Data to bulk update
 	usersData := []map[string]interface{}{
 		{"id": 1, "name": "Alice Smith", "age": 28, "status": "active"},
@@ -523,6 +590,11 @@ func bulkUpdate(dialect goqube.Dialect) {
 			"name":   "text",
 			"status": "text",
 		},
+	}
+
+	if triggerError {
+		// Empty query: missing table, primary key, and values, so the builder returns ErrInvalidBulkUpdateQuery.
+		query = &goqube.BulkUpdateQuery{}
 	}
 
 	sql, args, err := query.BuildBulkUpdateQuery(dialect)

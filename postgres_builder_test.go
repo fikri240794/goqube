@@ -1544,44 +1544,6 @@ func TestPostgresBuilder_buildTableWithParamIndex(t *testing.T) {
 	}
 }
 
-// TestPostgresBuilder_nextPlaceholder tests the nextPlaceholder method for generating PostgreSQL-style placeholders with incrementing indices.
-func TestPostgresBuilder_nextPlaceholder(t *testing.T) {
-	b := newPostgresBuilder()
-	tests := []struct {
-		name      string
-		startIdx  int
-		nextCalls int
-		want      []string
-	}{
-		{
-			name:      "single call",
-			startIdx:  1,
-			nextCalls: 1,
-			want:      []string{"$1"},
-		},
-		{
-			name:      "multiple calls",
-			startIdx:  2,
-			nextCalls: 3,
-			want:      []string{"$2", "$3", "$4"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Initialize the placeholder index for each test case.
-			idx := tt.startIdx
-			var got []string
-			// Call nextPlaceholder repeatedly and collect the results.
-			for i := 0; i < tt.nextCalls; i++ {
-				got = append(got, b.nextPlaceholder(&idx))
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("nextPlaceholder() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPostgresBuilder_BuildBulkUpdateQuery(t *testing.T) {
 	b := newPostgresBuilder()
 	tests := []struct {

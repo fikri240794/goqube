@@ -1,10 +1,10 @@
 package goqube
 
 import (
-	"fmt"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -31,10 +31,12 @@ func (b *sqlServerBuilder) adjustRawQueryPlaceholders(rawSQL string, rawArgs []i
 	re := regexp.MustCompile(`@p(\d+)`)
 	adjustedSQL := re.ReplaceAllStringFunc(rawSQL, func(match string) string {
 		// Extract the original placeholder number
-		var originalIndex int
-		fmt.Sscanf(match[2:], "%d", &originalIndex)
+		originalIndex, _ := strconv.Atoi(match[2:])
 		// Map @p0 -> @p{startIndex}, @p1 -> @p{startIndex+1}, etc.
-		return fmt.Sprintf("@p%d", startIndex+originalIndex)
+		buf := make([]byte, 0, len(match)+8)
+		buf = append(buf, "@p"...)
+		buf = strconv.AppendInt(buf, int64(startIndex+originalIndex), 10)
+		return string(buf)
 	})
 
 	// Advance the parameter index by the number of arguments
@@ -90,7 +92,7 @@ func (b *sqlServerBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for SQL Server.
 func (b *sqlServerBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	query, args, err := b.buildInsertQuery(q, 0, b.nextPlaceholder)
+	query, args, err := b.buildInsertQuery(q, 0, "@p%d")
 	if err != nil {
 		return "", nil, err
 	}
@@ -114,8 +116,8 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
 	args := make([]interface{}, 0, 16)
-	var sb strings.Builder
-	sb.WriteString("SELECT ")
+	buf := make([]byte, 0, 128)
+	buf = append(buf, "SELECT "...)
 
 	// Initialize parameter index for SQL Server's @p0, @p1 placeholders
 	paramIndex := 0
@@ -124,14 +126,14 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(fields)
+	buf = append(buf, fields...)
 
 	table, err := b.buildTableWithParamIndex(q.Table, &args, &paramIndex)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(table)
+	buf = append(buf, " FROM "...)
+	buf = append(buf, table...)
 
 	// Process JOINs only if they exist
 	if len(q.Joins) > 0 {
@@ -139,8 +141,8 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ")
-		sb.WriteString(joins)
+		buf = append(buf, " "...)
+		buf = append(buf, joins...)
 	}
 
 	// Process WHERE clause only if filter exists and produces content
@@ -150,8 +152,8 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 			return "", nil, err
 		}
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
@@ -161,8 +163,8 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(groupBy)
+		buf = append(buf, " GROUP BY "...)
+		buf = append(buf, groupBy...)
 	}
 
 	// Process ORDER BY only if sorting is specified
@@ -171,35 +173,47 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBy)
+		buf = append(buf, " ORDER BY "...)
+		buf = append(buf, orderBy...)
 	}
 
 	// SQL Server pagination uses OFFSET/FETCH with specific syntax requirements
 	if q.Skip > 0 {
 		offsetPlaceholder := b.nextPlaceholder(&paramIndex)
-		sb.WriteString(fmt.Sprintf(" OFFSET %s ROWS", offsetPlaceholder))
+		buf = append(buf, " OFFSET "...)
+		buf = append(buf, offsetPlaceholder...)
+		buf = append(buf, " ROWS"...)
 		args = append(args, int64(q.Skip))
 		if q.Take > 0 {
 			fetchPlaceholder := b.nextPlaceholder(&paramIndex)
-			sb.WriteString(fmt.Sprintf(" FETCH NEXT %s ROWS ONLY", fetchPlaceholder))
+			buf = append(buf, " FETCH NEXT "...)
+			buf = append(buf, fetchPlaceholder...)
+			buf = append(buf, " ROWS ONLY"...)
 			args = append(args, int64(q.Take))
 		}
 	} else if q.Take > 0 {
 		// FETCH requires OFFSET, so use 0 when only TAKE is specified
-		sb.WriteString(" OFFSET 0 ROWS")
+		buf = append(buf, " OFFSET 0 ROWS"...)
 		fetchPlaceholder := b.nextPlaceholder(&paramIndex)
-		sb.WriteString(fmt.Sprintf(" FETCH NEXT %s ROWS ONLY", fetchPlaceholder))
+		buf = append(buf, " FETCH NEXT "...)
+		buf = append(buf, fetchPlaceholder...)
+		buf = append(buf, " ROWS ONLY"...)
 		args = append(args, int64(q.Take))
 	}
 
 	// Handle aliasing with optimized string building
 	if q.Alias != "" {
-		return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sb.String()), q.Alias), args, nil
+		trimmed := strings.TrimSpace(string(buf))
+		aliasBuf := make([]byte, 0, len(trimmed)+len(q.Alias)+8)
+		aliasBuf = append(aliasBuf, "("...)
+		aliasBuf = append(aliasBuf, trimmed...)
+		aliasBuf = append(aliasBuf, ") AS "...)
+		aliasBuf = append(aliasBuf, q.Alias...)
+		return string(aliasBuf), args, nil
 	}
 
 	// SQL Server-specific whitespace normalization and parentheses cleanup
-	query := sb.String()
+	query := string(buf)
 	query = strings.ReplaceAll(query, "\n", " ")
 	query = strings.ReplaceAll(query, "\t", " ")
 	query = strings.Join(strings.Fields(query), " ")
@@ -210,7 +224,10 @@ func (b *sqlServerBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface
 
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for SQL Server.
 func (b *sqlServerBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
-	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 0, b.nextPlaceholder, b.buildFilter)
+	query, args, err := b.buildUpdateQueryWithContinuousIndex(q, 0, "@p%d", func(f *Filter, args *[]interface{}, idx int, isRoot bool) (string, int, error) {
+		where, err := b.buildFilter(f, args, &idx, isRoot)
+		return where, idx, err
+	})
 	if err != nil {
 		return "", nil, err
 	}
@@ -261,7 +278,6 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 		}
 	}
 
-	var valuesRows []string
 	var args []interface{}
 	paramIndex := 0
 
@@ -271,56 +287,68 @@ func (b *sqlServerBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []i
 		colTypes[col] = q.ColumnsType[col]
 	}
 
-	for _, row := range q.FieldsValues {
+	buf := make([]byte, 0, 256)
+	buf = append(buf, "UPDATE t SET "...)
+
+	for i, col := range columns {
+		if i > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, col...)
+		buf = append(buf, " = c."...)
+		buf = append(buf, col...)
+	}
+
+	buf = append(buf, " FROM "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " AS t INNER JOIN (VALUES "...)
+
+	for ri, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
 		if !ok {
 			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
 		}
 
-		var rowPlaceholders []string
-
 		// Add primary key first with CONVERT type cast
 		args = append(args, pkVal)
-		rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("CONVERT(%s, %s)", pkType, b.nextPlaceholder(&paramIndex)))
+		if ri > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, "("...)
+		buf = append(buf, "CONVERT("...)
+		buf = append(buf, pkType...)
+		buf = append(buf, ", "...)
+		buf = append(buf, b.nextPlaceholder(&paramIndex)...)
+		buf = append(buf, ")"...)
 
 		// Add other columns with CONVERT type cast
 		for _, col := range columns {
 			args = append(args, row[col])
-			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("CONVERT(%s, %s)", colTypes[col], b.nextPlaceholder(&paramIndex)))
+			buf = append(buf, ", CONVERT("...)
+			buf = append(buf, colTypes[col]...)
+			buf = append(buf, ", "...)
+			buf = append(buf, b.nextPlaceholder(&paramIndex)...)
+			buf = append(buf, ")"...)
 		}
-
-		valuesRows = append(valuesRows, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+		buf = append(buf, ")"...)
 	}
 
-	var sb strings.Builder
-	sb.WriteString("UPDATE t SET ")
-
-	setParts := make([]string, len(columns))
-	for i, col := range columns {
-		setParts[i] = fmt.Sprintf("%s = c.%s", col, col)
+	buf = append(buf, ") AS c("...)
+	buf = append(buf, q.PrimaryKey...)
+	for _, col := range columns {
+		buf = append(buf, ", "...)
+		buf = append(buf, col...)
 	}
-	sb.WriteString(strings.Join(setParts, ", "))
 
-	sb.WriteString(" FROM ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" AS t INNER JOIN (VALUES ")
-	sb.WriteString(strings.Join(valuesRows, ", "))
-	sb.WriteString(") AS c(")
+	buf = append(buf, ") ON t."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, " = CONVERT("...)
+	buf = append(buf, pkType...)
+	buf = append(buf, ", c."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, ")"...)
 
-	cColumns := make([]string, 0, len(columns)+1)
-	cColumns = append(cColumns, q.PrimaryKey)
-	cColumns = append(cColumns, columns...)
-	sb.WriteString(strings.Join(cColumns, ", "))
-
-	sb.WriteString(") ON t.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" = CONVERT(")
-	sb.WriteString(pkType)
-	sb.WriteString(", c.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(")")
-
-	query := sb.String()
+	query := string(buf)
 	if clause := b.buildOutputClause(q.Returning, "inserted"); clause != "" {
 		query += clause
 	}
@@ -359,13 +387,27 @@ func (b *sqlServerBuilder) buildFieldForFilter(f Field) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		trimmed := strings.TrimSpace(sub)
 		if f.Alias != "" {
-			return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sub), f.Alias), nil
+			buf := make([]byte, 0, len(trimmed)+len(f.Alias)+8)
+			buf = append(buf, "("...)
+			buf = append(buf, trimmed...)
+			buf = append(buf, ") AS "...)
+			buf = append(buf, f.Alias...)
+			return string(buf), nil
 		}
-		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+		buf := make([]byte, 0, len(trimmed)+2)
+		buf = append(buf, "("...)
+		buf = append(buf, trimmed...)
+		buf = append(buf, ")"...)
+		return string(buf), nil
 	} else if f.Table != "" && f.Column != "" {
 		// If both table and column are set, return a qualified column name.
-		return fmt.Sprintf("%s.%s", f.Table, f.Column), nil
+		buf := make([]byte, 0, len(f.Table)+len(f.Column)+1)
+		buf = append(buf, f.Table...)
+		buf = append(buf, "."...)
+		buf = append(buf, f.Column...)
+		return string(buf), nil
 	} else if f.Column != "" {
 		// If only column is set, return the column name.
 		return f.Column, nil
@@ -383,8 +425,8 @@ func (b *sqlServerBuilder) buildFilter(f *Filter, args *[]interface{}, paramInde
 	if len(f.Filters) > 0 {
 		// Preallocate parts slice for better memory efficiency with nested filters
 		parts := make([]string, 0, len(f.Filters))
-		for _, sub := range f.Filters {
-			part, err := b.buildFilter(&sub, args, paramIndex, false)
+		for i := range f.Filters {
+			part, err := b.buildFilter(&f.Filters[i], args, paramIndex, false)
 			if err != nil {
 				return "", err
 			}
@@ -405,7 +447,11 @@ func (b *sqlServerBuilder) buildFilter(f *Filter, args *[]interface{}, paramInde
 		if isRoot {
 			return joined, nil
 		}
-		return fmt.Sprintf("(%s)", joined), nil
+		buf := make([]byte, 0, len(joined)+2)
+		buf = append(buf, "("...)
+		buf = append(buf, joined...)
+		buf = append(buf, ")"...)
+		return string(buf), nil
 	}
 
 	fieldStr, err := b.buildFieldForFilter(f.Field)
@@ -417,7 +463,11 @@ func (b *sqlServerBuilder) buildFilter(f *Filter, args *[]interface{}, paramInde
 
 	// Early return for NULL operators to avoid unnecessary processing
 	if f.Operator == OperatorIsNull || f.Operator == OperatorIsNotNull {
-		return fieldStr + " " + operator, nil
+		buf := make([]byte, 0, len(fieldStr)+len(operator)+1)
+		buf = append(buf, fieldStr...)
+		buf = append(buf, ' ')
+		buf = append(buf, operator...)
+		return string(buf), nil
 	}
 
 	valueStr, err := b.buildFilterValue(f.Operator, f.Value, args, paramIndex)
@@ -425,7 +475,13 @@ func (b *sqlServerBuilder) buildFilter(f *Filter, args *[]interface{}, paramInde
 		return "", err
 	}
 
-	return fieldStr + " " + operator + " " + valueStr, nil
+	buf := make([]byte, 0, len(fieldStr)+len(operator)+len(valueStr)+2)
+	buf = append(buf, fieldStr...)
+	buf = append(buf, ' ')
+	buf = append(buf, operator...)
+	buf = append(buf, ' ')
+	buf = append(buf, valueStr...)
+	return string(buf), nil
 }
 
 // buildFilterValue returns the SQL representation of a filter value for SQL Server.
@@ -441,9 +497,18 @@ func (b *sqlServerBuilder) buildFilterValue(op Operator, v FilterValue, args *[]
 			return "", err
 		}
 		*args = append(*args, subArgs...)
-		return "(" + strings.TrimSpace(sub) + ")", nil
+		sub = strings.TrimSpace(sub)
+		buf := make([]byte, 0, len(sub)+2)
+		buf = append(buf, '(')
+		buf = append(buf, sub...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else if v.Table != "" && v.Column != "" {
-		return v.Table + "." + v.Column, nil
+		buf := make([]byte, 0, len(v.Table)+len(v.Column)+1)
+		buf = append(buf, v.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, v.Column...)
+		return string(buf), nil
 	} else if v.Column != "" {
 		return v.Column, nil
 	} else if op == OperatorIsNull || op == OperatorIsNotNull {
@@ -460,13 +525,24 @@ func (b *sqlServerBuilder) buildFilterValue(op Operator, v FilterValue, args *[]
 
 		// Preallocate slice with exact size for better performance
 		placeholders := make([]string, valLen)
+		total := 2
 		for i := 0; i < valLen; i++ {
 			*args = append(*args, val.Index(i).Interface())
 			placeholders[i] = b.nextPlaceholder(paramIndex)
+			total += len(placeholders[i]) + 2
 		}
 
 		// Avoid TrimSpace call since strings.Join doesn't produce extra spaces
-		return "(" + strings.Join(placeholders, ", ") + ")", nil
+		buf := make([]byte, 0, total)
+		buf = append(buf, '(')
+		for i, p := range placeholders {
+			if i > 0 {
+				buf = append(buf, ',', ' ')
+			}
+			buf = append(buf, p...)
+		}
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else {
 		*args = append(*args, v.Value)
 		placeholder := b.nextPlaceholder(paramIndex)
@@ -483,9 +559,17 @@ func (b *sqlServerBuilder) buildFilterValueLike(v FilterValue, args *[]interface
 		}
 		*args = append(*args, subArgs...)
 		placeholder := b.nextPlaceholder(paramIndex)
-		return "(" + placeholder + ")", nil
+		buf := make([]byte, 0, len(placeholder)+2)
+		buf = append(buf, '(')
+		buf = append(buf, placeholder...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	} else if v.Table != "" && v.Column != "" {
-		return v.Table + "." + v.Column, nil
+		buf := make([]byte, 0, len(v.Table)+len(v.Column)+1)
+		buf = append(buf, v.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, v.Column...)
+		return string(buf), nil
 	} else if v.Value != nil {
 		strVal, ok := v.Value.(string)
 		if !ok {
@@ -525,5 +609,16 @@ func (b *sqlServerBuilder) buildOrderBy(sorts []Sort) (string, error) {
 
 // nextPlaceholder returns the next parameter placeholder for SQL Server (e.g., @p1, @p2).
 func (b *sqlServerBuilder) nextPlaceholder(paramIndex *int) string {
-	return b.dynamicQueryBuilder.nextPlaceholder(paramIndex)
+	// Increment index first to keep placeholder numbering in sync.
+	*paramIndex++
+
+	// Use previous index value for the "@p%d" placeholder format.
+	// The SQL Server placeholder format always ends in %d (set in
+	// newSQLServerBuilder); build the placeholder with a byte buffer to
+	// avoid fmt.Sprintf's interface boxing (one heap alloc per placeholder).
+	idx := *paramIndex - 1
+	buf := make([]byte, 0, len(b.placeholderFormat)+8)
+	buf = append(buf, strings.TrimSuffix(b.placeholderFormat, "%d")...)
+	buf = strconv.AppendInt(buf, int64(idx), 10)
+	return string(buf)
 }

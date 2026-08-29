@@ -1186,13 +1186,13 @@ func TestDynamicQueryBuilder_buildInsertQuery(t *testing.T) {
 
 	// Define test cases for different insert query scenarios.
 	tests := []struct {
-		name            string
-		q               *InsertQuery
-		startIdx        int
-		nextPlaceholder func(*int) string
-		wantSQL         string
-		wantArgs        []interface{}
-		wantErr         bool
+		name              string
+		q                 *InsertQuery
+		startIdx          int
+		placeholderFormat string
+		wantSQL           string
+		wantArgs          []interface{}
+		wantErr           bool
 	}{
 		{
 			name:     "nil query",
@@ -1216,29 +1216,29 @@ func TestDynamicQueryBuilder_buildInsertQuery(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:            "simple placeholder (MySQL/SQLite)",
-			q:               &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
-			startIdx:        1,
-			nextPlaceholder: nil,
-			wantSQL:         "INSERT INTO users (id, name) VALUES (?, ?), (?, ?)",
-			wantArgs:        []interface{}{1, "foo", 2, "bar"},
-			wantErr:         false,
+			name:              "simple placeholder (MySQL/SQLite)",
+			q:                 &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
+			startIdx:          1,
+			placeholderFormat: "?",
+			wantSQL:           "INSERT INTO users (id, name) VALUES (?, ?), (?, ?)",
+			wantArgs:          []interface{}{1, "foo", 2, "bar"},
+			wantErr:           false,
 		},
 		{
-			name:            "indexed placeholder (PostgreSQL/SQL Server)",
-			q:               &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			wantSQL:         "INSERT INTO users (id, name) VALUES ($1, $2), ($3, $4)",
-			wantArgs:        []interface{}{1, "foo", 2, "bar"},
-			wantErr:         false,
+			name:              "indexed placeholder (PostgreSQL/SQL Server)",
+			q:                 &InsertQuery{Table: "users", Values: []map[string]interface{}{{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}}},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			wantSQL:           "INSERT INTO users (id, name) VALUES ($1, $2), ($3, $4)",
+			wantArgs:          []interface{}{1, "foo", 2, "bar"},
+			wantErr:           false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call buildInsertQuery with the provided query, startIdx, and nextPlaceholder function.
-			got, gotArgs, err := dqb.buildInsertQuery(tt.q, tt.startIdx, tt.nextPlaceholder)
+			got, gotArgs, err := dqb.buildInsertQuery(tt.q, tt.startIdx, tt.placeholderFormat)
 			// Check if the error state matches the expected result.
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildInsertQuery() error = %v, wantErr %v", err, tt.wantErr)
@@ -1263,14 +1263,14 @@ func TestDynamicQueryBuilder_buildUpdateQueryWithContinuousIndex(t *testing.T) {
 
 	// Define test cases for different update query scenarios with continuous index placeholders.
 	tests := []struct {
-		name            string
-		q               *UpdateQuery
-		startIdx        int
-		nextPlaceholder func(*int) string
-		buildFilter     func(*Filter, *[]interface{}, *int, bool) (string, error)
-		wantSQL         string
-		wantArgs        []interface{}
-		wantErr         bool
+		name              string
+		q                 *UpdateQuery
+		startIdx          int
+		placeholderFormat string
+		buildFilter       func(*Filter, *[]interface{}, int, bool) (string, int, error)
+		wantSQL           string
+		wantArgs          []interface{}
+		wantErr           bool
 	}{
 		{
 			name:     "nil query",
@@ -1294,51 +1294,53 @@ func TestDynamicQueryBuilder_buildUpdateQueryWithContinuousIndex(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:            "valid update, no filter",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			buildFilter:     func(f *Filter, args *[]interface{}, idx *int, b bool) (string, error) { return "", nil },
-			wantSQL:         "UPDATE users SET id = $1, name = $2",
-			wantArgs:        []interface{}{1, "foo"},
-			wantErr:         false,
+			name:              "valid update, no filter",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			buildFilter:       func(f *Filter, args *[]interface{}, idx int, b bool) (string, int, error) { return "", idx, nil },
+			wantSQL:           "UPDATE users SET id = $1, name = $2",
+			wantArgs:          []interface{}{1, "foo"},
+			wantErr:           false,
 		},
 		{
-			name:            "valid update, with filter",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{}},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			buildFilter:     func(f *Filter, args *[]interface{}, idx *int, b bool) (string, error) { return "id = $3", nil },
-			wantSQL:         "UPDATE users SET id = $1, name = $2 WHERE id = $3",
-			wantArgs:        []interface{}{1, "foo"},
-			wantErr:         false,
+			name:              "valid update, with filter",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{}},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			buildFilter:       func(f *Filter, args *[]interface{}, idx int, b bool) (string, int, error) { return "id = $3", idx, nil },
+			wantSQL:           "UPDATE users SET id = $1, name = $2 WHERE id = $3",
+			wantArgs:          []interface{}{1, "foo"},
+			wantErr:           false,
 		},
 		{
-			name:            "filter returns error",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			buildFilter:     func(f *Filter, args *[]interface{}, idx *int, b bool) (string, error) { return "", fmt.Errorf("fail") },
-			wantSQL:         "",
-			wantArgs:        nil,
-			wantErr:         true,
+			name:              "filter returns error",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			buildFilter: func(f *Filter, args *[]interface{}, idx int, b bool) (string, int, error) {
+				return "", idx, fmt.Errorf("fail")
+			},
+			wantSQL:  "",
+			wantArgs: nil,
+			wantErr:  true,
 		},
 		{
-			name:            "filter returns empty string",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			buildFilter:     func(f *Filter, args *[]interface{}, idx *int, b bool) (string, error) { return "", nil },
-			wantSQL:         "UPDATE users SET id = $1",
-			wantArgs:        []interface{}{1},
-			wantErr:         false,
+			name:              "filter returns empty string",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			buildFilter:       func(f *Filter, args *[]interface{}, idx int, b bool) (string, int, error) { return "", idx, nil },
+			wantSQL:           "UPDATE users SET id = $1",
+			wantArgs:          []interface{}{1},
+			wantErr:           false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call buildUpdateQueryWithContinuousIndex with the provided query, startIdx, nextPlaceholder, and buildFilter function.
-			got, gotArgs, err := dqb.buildUpdateQueryWithContinuousIndex(tt.q, tt.startIdx, tt.nextPlaceholder, tt.buildFilter)
+			got, gotArgs, err := dqb.buildUpdateQueryWithContinuousIndex(tt.q, tt.startIdx, tt.placeholderFormat, tt.buildFilter)
 			// Check if the error state matches the expected result.
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildUpdateQueryWithContinuousIndex() error = %v, wantErr %v", err, tt.wantErr)
@@ -1363,13 +1365,13 @@ func TestDynamicQueryBuilder_buildUpdateQuery(t *testing.T) {
 
 	// Define test cases for different update query scenarios.
 	tests := []struct {
-		name            string
-		q               *UpdateQuery
-		nextPlaceholder func(*int) string
-		buildFilter     func(*Filter, *[]interface{}) (string, error)
-		wantSQL         string
-		wantArgs        []interface{}
-		wantErr         bool
+		name              string
+		q                 *UpdateQuery
+		placeholderFormat string
+		buildFilter       func(*Filter, *[]interface{}) (string, error)
+		wantSQL           string
+		wantArgs          []interface{}
+		wantErr           bool
 	}{
 		{
 			name:     "nil query",
@@ -1393,47 +1395,38 @@ func TestDynamicQueryBuilder_buildUpdateQuery(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:            "valid update, no filter",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}},
-			nextPlaceholder: nil,
-			buildFilter:     func(f *Filter, args *[]interface{}) (string, error) { return "", nil },
-			wantSQL:         "UPDATE users SET id = ?, name = ?",
-			wantArgs:        []interface{}{1, "foo"},
-			wantErr:         false,
+			name:              "valid update, no filter",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}},
+			placeholderFormat: "?",
+			buildFilter:       func(f *Filter, args *[]interface{}) (string, error) { return "", nil },
+			wantSQL:           "UPDATE users SET id = ?, name = ?",
+			wantArgs:          []interface{}{1, "foo"},
+			wantErr:           false,
 		},
 		{
-			name:            "valid update, with filter",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{}},
-			nextPlaceholder: nil,
-			buildFilter:     func(f *Filter, args *[]interface{}) (string, error) { return "id = ?", nil },
-			wantSQL:         "UPDATE users SET id = ?, name = ? WHERE id = ?",
-			wantArgs:        []interface{}{1, "foo"},
-			wantErr:         false,
+			name:              "valid update, with filter",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1, "name": "foo"}, Filter: &Filter{}},
+			placeholderFormat: "?",
+			buildFilter:       func(f *Filter, args *[]interface{}) (string, error) { return "id = ?", nil },
+			wantSQL:           "UPDATE users SET id = ?, name = ? WHERE id = ?",
+			wantArgs:          []interface{}{1, "foo"},
+			wantErr:           false,
 		},
 		{
-			name:            "filter returns error",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
-			nextPlaceholder: nil,
-			buildFilter:     func(f *Filter, args *[]interface{}) (string, error) { return "", fmt.Errorf("fail") },
-			wantSQL:         "",
-			wantArgs:        nil,
-			wantErr:         true,
-		},
-		{
-			name:            "nextPlaceholder not nil (should error)",
-			q:               &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}},
-			nextPlaceholder: func(idx *int) string { return "$1" },
-			buildFilter:     func(f *Filter, args *[]interface{}) (string, error) { return "", nil },
-			wantSQL:         "",
-			wantArgs:        nil,
-			wantErr:         true,
+			name:              "filter returns error",
+			q:                 &UpdateQuery{Table: "users", FieldsValue: map[string]interface{}{"id": 1}, Filter: &Filter{}},
+			placeholderFormat: "?",
+			buildFilter:       func(f *Filter, args *[]interface{}) (string, error) { return "", fmt.Errorf("fail") },
+			wantSQL:           "",
+			wantArgs:          nil,
+			wantErr:           true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call buildUpdateQuery with the provided query, nextPlaceholder, and buildFilter function.
-			got, gotArgs, err := dqb.buildUpdateQuery(tt.q, tt.nextPlaceholder, tt.buildFilter)
+			got, gotArgs, err := dqb.buildUpdateQuery(tt.q, tt.placeholderFormat, tt.buildFilter)
 			// Check if the error state matches the expected result.
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildUpdateQuery() error = %v, wantErr %v", err, tt.wantErr)
@@ -1458,13 +1451,13 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 
 	// Define test cases for different value, column, and indexed placeholder scenarios.
 	tests := []struct {
-		name            string
-		values          interface{}
-		columns         []string
-		startIdx        int
-		nextPlaceholder func(*int) string
-		wantSQL         string
-		wantArgs        []interface{}
+		name              string
+		values            interface{}
+		columns           []string
+		startIdx          int
+		placeholderFormat string
+		wantSQL           string
+		wantArgs          []interface{}
 	}{
 		{
 			name: "multi-row insert",
@@ -1472,29 +1465,29 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 				{"id": 1, "name": "foo"},
 				{"id": 2, "name": "bar"},
 			},
-			columns:         []string{"id", "name"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			wantSQL:         "($1, $2), ($3, $4)",
-			wantArgs:        []interface{}{1, "foo", 2, "bar"},
+			columns:           []string{"id", "name"},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			wantSQL:           "($1, $2), ($3, $4)",
+			wantArgs:          []interface{}{1, "foo", 2, "bar"},
 		},
 		{
-			name:            "single-row update",
-			values:          map[string]interface{}{"id": 1, "name": "foo"},
-			columns:         []string{"id", "name"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { s := fmt.Sprintf("$%d", *idx); (*idx)++; return s },
-			wantSQL:         "id = $1, name = $2",
-			wantArgs:        []interface{}{1, "foo"},
+			name:              "single-row update",
+			values:            map[string]interface{}{"id": 1, "name": "foo"},
+			columns:           []string{"id", "name"},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			wantSQL:           "id = $1, name = $2",
+			wantArgs:          []interface{}{1, "foo"},
 		},
 		{
-			name:            "default case (unsupported type)",
-			values:          123,
-			columns:         []string{"id"},
-			startIdx:        1,
-			nextPlaceholder: func(idx *int) string { return "$1" },
-			wantSQL:         "",
-			wantArgs:        nil,
+			name:              "default case (unsupported type)",
+			values:            123,
+			columns:           []string{"id"},
+			startIdx:          1,
+			placeholderFormat: "$%d",
+			wantSQL:           "",
+			wantArgs:          nil,
 		},
 	}
 
@@ -1503,7 +1496,7 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 			// Set the starting index for the placeholder function.
 			idx := tt.startIdx
 			// Call buildPlaceholdersAndArgsWithIndex with the provided values, columns, and placeholder function.
-			gotSQL, gotArgs := dqb.buildPlaceholdersAndArgsWithIndex(tt.values, tt.columns, &idx, tt.nextPlaceholder)
+			gotSQL, gotArgs := dqb.buildPlaceholdersAndArgsWithIndex(tt.values, tt.columns, &idx, tt.placeholderFormat)
 			// Compare the generated SQL with the expected value.
 			if gotSQL != tt.wantSQL {
 				t.Errorf("buildPlaceholdersAndArgsWithIndex() SQL = %v, want %v", gotSQL, tt.wantSQL)
@@ -1511,56 +1504,6 @@ func TestDynamicQueryBuilder_buildPlaceholdersAndArgsWithIndex(t *testing.T) {
 			// Ensure the collected arguments match the expected arguments.
 			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
 				t.Errorf("buildPlaceholdersAndArgsWithIndex() args = %v, want %v", gotArgs, tt.wantArgs)
-			}
-		})
-	}
-}
-
-// TestDynamicQueryBuilder_nextPlaceholder tests the nextPlaceholder method for different placeholder formats and index handling.
-func TestDynamicQueryBuilder_nextPlaceholder(t *testing.T) {
-	// Define test cases for different placeholder formats and starting indices.
-	tests := []struct {
-		name     string
-		format   string
-		startIdx int
-		want     string
-		wantIdx  int
-	}{
-		{
-			name:     "question mark format",
-			format:   "?",
-			startIdx: 1,
-			want:     "?",
-			wantIdx:  2,
-		},
-		{
-			name:     "dollar format",
-			format:   "$%d",
-			startIdx: 3,
-			want:     "$3",
-			wantIdx:  4,
-		},
-		{
-			name:     "at p format",
-			format:   "@p%d",
-			startIdx: 5,
-			want:     "@p5",
-			wantIdx:  6,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a dynamicQueryBuilder with the specified placeholder format.
-			dqb := &dynamicQueryBuilder{placeholderFormat: tt.format}
-			idx := tt.startIdx
-			// Call nextPlaceholder and check the returned placeholder and updated index.
-			got := dqb.nextPlaceholder(&idx)
-			if got != tt.want {
-				t.Errorf("nextPlaceholder() = %v, want %v", got, tt.want)
-			}
-			if idx != tt.wantIdx {
-				t.Errorf("nextPlaceholder() idx = %v, want %v", idx, tt.wantIdx)
 			}
 		})
 	}

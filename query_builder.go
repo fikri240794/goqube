@@ -1,9 +1,9 @@
 package goqube
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -29,14 +29,24 @@ func (b *dynamicQueryBuilder) buildFieldForFilter(f Field, buildSelectQuery func
 		if err != nil {
 			return "", err
 		}
+		trimmed := strings.TrimSpace(sub)
+		buf := make([]byte, 0, len(trimmed)+len(f.Alias)+6)
+		buf = append(buf, '(')
+		buf = append(buf, trimmed...)
+		buf = append(buf, ')')
 		if f.Alias != "" {
-			return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sub), f.Alias), nil
+			buf = append(buf, ' ', 'A', 'S', ' ')
+			buf = append(buf, f.Alias...)
 		}
-		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+		return string(buf), nil
 	}
 	if f.Table != "" && f.Column != "" {
 		// Return qualified column name (table.column)
-		return fmt.Sprintf("%s.%s", f.Table, f.Column), nil
+		buf := make([]byte, 0, len(f.Table)+len(f.Column)+1)
+		buf = append(buf, f.Table...)
+		buf = append(buf, '.')
+		buf = append(buf, f.Column...)
+		return string(buf), nil
 	}
 	if f.Column != "" {
 		return f.Column, nil
@@ -46,9 +56,11 @@ func (b *dynamicQueryBuilder) buildFieldForFilter(f Field, buildSelectQuery func
 
 // buildFields returns the SQL representation of a slice of fields for use in SELECT, GROUP BY, or ORDER BY clauses.
 func (b *dynamicQueryBuilder) buildFields(fields []Field, args *[]interface{}, buildSelectQuery func(*SelectQuery) (string, []interface{}, error)) (string, error) {
-	// Preallocate slice for better performance
-	out := make([]string, 0, len(fields))
-	for _, f := range fields {
+	buf := make([]byte, 0, 64)
+	for i, f := range fields {
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
 		if f.SelectQuery != nil {
 			// Build subquery and collect its arguments
 			sub, subArgs, err := buildSelectQuery(f.SelectQuery)
@@ -56,30 +68,34 @@ func (b *dynamicQueryBuilder) buildFields(fields []Field, args *[]interface{}, b
 				return "", err
 			}
 			*args = append(*args, subArgs...)
+			buf = append(buf, '(')
+			buf = append(buf, strings.TrimSpace(sub)...)
+			buf = append(buf, ')')
 			if f.Alias != "" {
-				out = append(out, fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sub), f.Alias))
-			} else {
-				out = append(out, fmt.Sprintf("(%s)", strings.TrimSpace(sub)))
+				buf = append(buf, ' ', 'A', 'S', ' ')
+				buf = append(buf, f.Alias...)
 			}
 		} else if f.Table != "" && f.Column != "" {
 			// Handle qualified column with optional alias
+			buf = append(buf, f.Table...)
+			buf = append(buf, '.')
+			buf = append(buf, f.Column...)
 			if f.Alias != "" {
-				out = append(out, fmt.Sprintf("%s.%s AS %s", f.Table, f.Column, f.Alias))
-			} else {
-				out = append(out, fmt.Sprintf("%s.%s", f.Table, f.Column))
+				buf = append(buf, ' ', 'A', 'S', ' ')
+				buf = append(buf, f.Alias...)
 			}
 		} else if f.Column != "" {
 			// Handle plain column with optional alias
+			buf = append(buf, f.Column...)
 			if f.Alias != "" {
-				out = append(out, fmt.Sprintf("%s AS %s", f.Column, f.Alias))
-			} else {
-				out = append(out, f.Column)
+				buf = append(buf, ' ', 'A', 'S', ' ')
+				buf = append(buf, f.Alias...)
 			}
 		} else {
 			return "", ErrInvalidField
 		}
 	}
-	return strings.Join(out, ", "), nil
+	return string(buf), nil
 }
 
 // buildFilter returns the SQL representation of a filter condition, supporting nested filters and logical operators.
@@ -90,8 +106,8 @@ func (b *dynamicQueryBuilder) buildFilter(f *Filter, args *[]interface{}, isRoot
 	if len(f.Filters) > 0 {
 		// Process nested filters recursively and collect valid parts
 		parts := make([]string, 0, len(f.Filters))
-		for _, sub := range f.Filters {
-			part, err := b.buildFilter(&sub, args, false, buildSelectQuery)
+		for i := range f.Filters {
+			part, err := b.buildFilter(&f.Filters[i], args, false, buildSelectQuery)
 			if err != nil {
 				return "", err
 			}
@@ -100,7 +116,7 @@ func (b *dynamicQueryBuilder) buildFilter(f *Filter, args *[]interface{}, isRoot
 			}
 		}
 		// Join with logical operator and clean up spacing
-		joined := strings.Join(parts, fmt.Sprintf(" %s ", f.Logic))
+		joined := strings.Join(parts, " "+string(f.Logic)+" ")
 		// Normalize multiple spaces that might occur from complex nested filters
 		for strings.Contains(joined, "  ") {
 			joined = strings.ReplaceAll(joined, "  ", " ")
@@ -111,7 +127,11 @@ func (b *dynamicQueryBuilder) buildFilter(f *Filter, args *[]interface{}, isRoot
 			return joined, nil
 		}
 		// Non-root filters need parentheses to maintain correct precedence
-		return fmt.Sprintf("(%s)", joined), nil
+		buf := make([]byte, 0, len(joined)+2)
+		buf = append(buf, '(')
+		buf = append(buf, joined...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	}
 	// Handle simple filter: field operator value
 	fieldStr, err := b.buildFieldForFilter(f.Field, buildSelectQuery)
@@ -122,7 +142,14 @@ func (b *dynamicQueryBuilder) buildFilter(f *Filter, args *[]interface{}, isRoot
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s %s %s", fieldStr, f.Operator, valueStr), nil
+	// Build simple filter: field operator value
+	buf := make([]byte, 0, len(fieldStr)+len(f.Operator)+len(valueStr)+2)
+	buf = append(buf, fieldStr...)
+	buf = append(buf, ' ')
+	buf = append(buf, f.Operator...)
+	buf = append(buf, ' ')
+	buf = append(buf, valueStr...)
+	return string(buf), nil
 }
 
 // buildFilterValue returns the SQL representation of a filter value for use in WHERE or HAVING clauses.
@@ -130,7 +157,11 @@ func (b *dynamicQueryBuilder) buildFilterValue(op Operator, v FilterValue, args 
 	// Check for column references first (most common case)
 	if v.Column != "" {
 		if v.Table != "" {
-			return fmt.Sprintf("%s.%s", v.Table, v.Column), nil
+			buf := make([]byte, 0, len(v.Table)+len(v.Column)+1)
+			buf = append(buf, v.Table...)
+			buf = append(buf, '.')
+			buf = append(buf, v.Column...)
+			return string(buf), nil
 		}
 		return v.Column, nil
 	}
@@ -151,13 +182,18 @@ func (b *dynamicQueryBuilder) buildFilterValue(op Operator, v FilterValue, args 
 			return "", ErrOperatorArrayEmpty
 		}
 
-		// Preallocate slice and avoid unnecessary TrimSpace call
-		placeholders := make([]string, valLen)
+		// Build placeholder list and collect argument values
+		buf := make([]byte, 0, 2+valLen*3)
+		buf = append(buf, '(')
 		for i := 0; i < valLen; i++ {
 			*args = append(*args, val.Index(i).Interface())
-			placeholders[i] = "?"
+			if i > 0 {
+				buf = append(buf, ',', ' ')
+			}
+			buf = append(buf, '?')
 		}
-		return fmt.Sprintf("(%s)", strings.Join(placeholders, ", ")), nil
+		buf = append(buf, ')')
+		return string(buf), nil
 	}
 
 	// Default case: single parameter placeholder
@@ -174,7 +210,11 @@ func (b *dynamicQueryBuilder) buildFilterValueWithSelectQuery(op Operator, v Fil
 			return "", err
 		}
 		*args = append(*args, subArgs...)
-		return fmt.Sprintf("(%s)", strings.TrimSpace(sub)), nil
+		buf := make([]byte, 0, len(sub)+2)
+		buf = append(buf, '(')
+		buf = append(buf, strings.TrimSpace(sub)...)
+		buf = append(buf, ')')
+		return string(buf), nil
 	}
 
 	// For non-subquery cases, delegate to regular buildFilterValue
@@ -183,18 +223,36 @@ func (b *dynamicQueryBuilder) buildFilterValueWithSelectQuery(op Operator, v Fil
 
 // buildGroupBy returns the SQL representation of a GROUP BY clause from a slice of fields.
 func (b *dynamicQueryBuilder) buildGroupBy(fields []Field) (string, error) {
-	// Preallocate slice for better performance when we have fields to process
-	out := make([]string, 0, len(fields))
+	// First pass: validate fields and estimate buffer size for a single allocation
+	total := 0
 	for _, f := range fields {
 		if f.Table != "" && f.Column != "" {
-			out = append(out, fmt.Sprintf("%s.%s", f.Table, f.Column))
+			total += len(f.Table) + len(f.Column) + 1
 		} else if f.Column != "" {
-			out = append(out, f.Column)
+			total += len(f.Column)
 		} else {
 			return "", ErrInvalidGroupBy
 		}
 	}
-	return strings.Join(out, ", "), nil
+	if len(fields) == 0 {
+		return "", nil
+	}
+
+	// Build the whole clause in a single buffer to avoid per-field allocations
+	buf := make([]byte, 0, total+2*(len(fields)-1))
+	for i, f := range fields {
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
+		if f.Table != "" && f.Column != "" {
+			buf = append(buf, f.Table...)
+			buf = append(buf, '.')
+			buf = append(buf, f.Column...)
+		} else {
+			buf = append(buf, f.Column...)
+		}
+	}
+	return string(buf), nil
 }
 
 // buildJoins returns the SQL representation of JOIN clauses from a slice of Join structs.
@@ -204,88 +262,119 @@ func (b *dynamicQueryBuilder) buildJoins(
 	buildSelectQuery func(*SelectQuery) (string, []interface{}, error),
 	buildFilter func(f *Filter, args *[]interface{}) (string, error),
 ) (string, error) {
-	// Preallocate slice for better performance when processing multiple joins
-	out := make([]string, 0, len(joins))
-	for _, j := range joins {
-		table, err := b.buildTable(j.Table, args, buildSelectQuery)
+	buf := make([]byte, 0, 64)
+	for i := range joins {
+		table, err := b.buildTable(joins[i].Table, args, buildSelectQuery)
 		if err != nil {
 			return "", err
 		}
-		filter, err := buildFilter(&j.Filter, args)
+		filter, err := buildFilter(&joins[i].Filter, args)
 		if err != nil {
 			return "", err
 		}
 		// Convert join type to uppercase for SQL standard compliance
-		joinStr := fmt.Sprintf("%s %s ON %s", strings.ToUpper(string(j.Type)), table, filter)
-		out = append(out, joinStr)
+		if i > 0 {
+			buf = append(buf, ' ')
+		}
+		buf = append(buf, strings.ToUpper(string(joins[i].Type))...)
+		buf = append(buf, ' ')
+		buf = append(buf, table...)
+		buf = append(buf, ' ', 'O', 'N', ' ')
+		buf = append(buf, filter...)
 	}
-	return strings.Join(out, " "), nil
+	return string(buf), nil
 }
 
 // buildOrderBy returns the SQL representation of an ORDER BY clause from a slice of Sort structs.
 func (b *dynamicQueryBuilder) buildOrderBy(sorts []Sort) (string, error) {
-	// Preallocate slice for better performance when processing multiple sorts
-	out := make([]string, 0, len(sorts))
-	for _, s := range sorts {
+	buf := make([]byte, 0, 32)
+	for i, s := range sorts {
 		f := s.Field
 		var orderExpr string
 		if f.Table != "" && f.Column != "" {
-			orderExpr = fmt.Sprintf("%s.%s %s", f.Table, f.Column, s.Direction)
+			part := make([]byte, 0, len(f.Table)+len(f.Column)+len(s.Direction)+2)
+			part = append(part, f.Table...)
+			part = append(part, '.')
+			part = append(part, f.Column...)
+			part = append(part, ' ')
+			part = append(part, s.Direction...)
+			orderExpr = strings.TrimSpace(string(part))
 		} else if f.Column != "" {
-			orderExpr = fmt.Sprintf("%s %s", f.Column, s.Direction)
+			part := make([]byte, 0, len(f.Column)+len(s.Direction)+1)
+			part = append(part, f.Column...)
+			part = append(part, ' ')
+			part = append(part, s.Direction...)
+			orderExpr = strings.TrimSpace(string(part))
 		} else {
 			return "", ErrInvalidOrderBy
 		}
-		// Trim any extra spaces from the order expression
-		out = append(out, strings.TrimSpace(orderExpr))
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
+		buf = append(buf, orderExpr...)
 	}
-	return strings.Join(out, ", "), nil
+	return string(buf), nil
 }
 
 // buildPlaceholdersAndArgs generates SQL placeholders and argument slices for INSERT and UPDATE queries.
 func (b *dynamicQueryBuilder) buildPlaceholdersAndArgs(values interface{}, columns []string, format string) (string, []interface{}) {
 	var (
-		rows         []string
-		placeholders []string
-		args         []interface{}
-		idx          = 1
+		args []interface{}
+		idx  = 1
 	)
 	switch v := values.(type) {
 	case []map[string]interface{}:
 		// Preallocate slices for better performance when processing multiple rows
-		rows = make([]string, 0, len(v))
 		args = make([]interface{}, 0, len(v)*len(columns))
+		buf := make([]byte, 0, len(v)*(len(columns)*3+2))
 
-		for _, row := range v {
-			// Preallocate inner slice for row placeholders
-			ph := make([]string, 0, len(columns))
-			for _, col := range columns {
+		for ri, row := range v {
+			// Build row placeholder list with separators
+			rowBuf := make([]byte, 0, len(columns)*3)
+			for ci, col := range columns {
+				if ci > 0 {
+					rowBuf = append(rowBuf, ',', ' ')
+				}
 				if format == "?" {
-					ph = append(ph, "?")
+					rowBuf = append(rowBuf, '?')
 				} else {
-					ph = append(ph, fmt.Sprintf(format, idx))
+					rowBuf = append(rowBuf, format[:len(format)-2]...)
+					rowBuf = strconv.AppendInt(rowBuf, int64(idx), 10)
 					idx++
 				}
 				args = append(args, row[col])
 			}
-			rows = append(rows, fmt.Sprintf("(%s)", strings.TrimSpace(strings.Join(ph, ", "))))
+			trimmed := strings.TrimSpace(string(rowBuf))
+			if ri > 0 {
+				buf = append(buf, ',', ' ')
+			}
+			buf = append(buf, '(')
+			buf = append(buf, trimmed...)
+			buf = append(buf, ')')
 		}
-		return strings.Join(rows, ", "), args
+		return string(buf), args
 	case map[string]interface{}:
 		// Preallocate slices for better performance when processing single row
-		placeholders = make([]string, 0, len(columns))
 		args = make([]interface{}, 0, len(columns))
+		buf := make([]byte, 0, len(columns)*16)
 
-		for _, col := range columns {
+		for i, col := range columns {
+			if i > 0 {
+				buf = append(buf, ',', ' ')
+			}
+			buf = append(buf, col...)
+			buf = append(buf, ' ', '=')
 			if format == "?" {
-				placeholders = append(placeholders, fmt.Sprintf("%s = ?", col))
+				buf = append(buf, ' ', '?')
 			} else {
-				placeholders = append(placeholders, fmt.Sprintf("%s = "+format, col, idx))
+				buf = append(buf, ' ')
+				buf = append(buf, format[:len(format)-2]...)
+				buf = strconv.AppendInt(buf, int64(idx), 10)
 				idx++
 			}
 			args = append(args, v[col])
 		}
-		return strings.Join(placeholders, ", "), args
+		return string(buf), args
 	default:
 		return "", nil
 	}
@@ -302,17 +391,25 @@ func (b *dynamicQueryBuilder) buildTable(t Table, args *[]interface{}, buildSele
 		*args = append(*args, subArgs...)
 
 		// Wrap subquery in parentheses, optionally with alias
-		subQuery := fmt.Sprintf("(%s)", strings.TrimSpace(sub))
+		buf := make([]byte, 0, len(sub)+len(t.Alias)+6)
+		buf = append(buf, '(')
+		buf = append(buf, strings.TrimSpace(sub)...)
+		buf = append(buf, ')')
 		if t.Alias != "" {
-			return fmt.Sprintf("%s AS %s", subQuery, t.Alias), nil
+			buf = append(buf, ' ', 'A', 'S', ' ')
+			buf = append(buf, t.Alias...)
 		}
-		return subQuery, nil
+		return string(buf), nil
 	}
 
 	if t.Name != "" {
 		// Handle regular table names with optional alias
 		if t.Alias != "" {
-			return fmt.Sprintf("%s AS %s", t.Name, t.Alias), nil
+			buf := make([]byte, 0, len(t.Name)+len(t.Alias)+4)
+			buf = append(buf, t.Name...)
+			buf = append(buf, ' ', 'A', 'S', ' ')
+			buf = append(buf, t.Alias...)
+			return string(buf), nil
 		}
 		return t.Name, nil
 	}
@@ -331,10 +428,10 @@ func (b *dynamicQueryBuilder) buildDeleteQuery(
 		return "", nil, ErrInvalidDeleteQuery
 	}
 
-	// Use strings.Builder for efficient string concatenation
-	var sb strings.Builder
-	sb.WriteString("DELETE FROM ")
-	sb.WriteString(table)
+	// Build the query with a byte buffer for efficient concatenation
+	buf := make([]byte, 0, len(table)+32)
+	buf = append(buf, "DELETE FROM "...)
+	buf = append(buf, table...)
 
 	if filter != nil {
 		where, err := buildFilter(filter, args)
@@ -343,19 +440,19 @@ func (b *dynamicQueryBuilder) buildDeleteQuery(
 		}
 		// Only add WHERE clause if filter produces non-empty result
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
-	return sb.String(), *args, nil
+	return string(buf), *args, nil
 }
 
 // buildInsertQuery constructs an INSERT SQL statement for the given table and values with support for multiple placeholder formats.
 func (b *dynamicQueryBuilder) buildInsertQuery(
 	q *InsertQuery,
 	startIndex int,
-	nextPlaceholder func(*int) string,
+	placeholderFormat string,
 ) (string, []interface{}, error) {
 	if q == nil || q.Table == "" || len(q.Values) == 0 {
 		return "", nil, ErrInvalidInsertQuery
@@ -371,31 +468,36 @@ func (b *dynamicQueryBuilder) buildInsertQuery(
 	// Build query using appropriate placeholder strategy
 	var placeholders string
 	var args []interface{}
-	if nextPlaceholder == nil {
+	if placeholderFormat == "?" {
 		placeholders, args = b.buildPlaceholdersAndArgs(q.Values, columns, "?")
 	} else {
 		paramIndex := startIndex
-		placeholders, args = b.buildPlaceholdersAndArgsWithIndex(q.Values, columns, &paramIndex, nextPlaceholder)
+		placeholders, args = b.buildPlaceholdersAndArgsWithIndex(q.Values, columns, &paramIndex, placeholderFormat)
 	}
 
-	// Use strings.Builder for efficient string concatenation
-	var sb strings.Builder
-	sb.WriteString("INSERT INTO ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" (")
-	sb.WriteString(strings.Join(columns, ", "))
-	sb.WriteString(") VALUES ")
-	sb.WriteString(placeholders)
+	// Build the query with a byte buffer for efficient concatenation
+	buf := make([]byte, 0, len(q.Table)+len(columns)*8+32)
+	buf = append(buf, "INSERT INTO "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " ("...)
+	for i, col := range columns {
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
+		buf = append(buf, col...)
+	}
+	buf = append(buf, ") VALUES "...)
+	buf = append(buf, placeholders...)
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // buildUpdateQueryWithContinuousIndex constructs an UPDATE SQL statement with indexed placeholders.
 func (b *dynamicQueryBuilder) buildUpdateQueryWithContinuousIndex(
 	q *UpdateQuery,
 	startIndex int,
-	nextPlaceholder func(*int) string,
-	buildFilter func(*Filter, *[]interface{}, *int, bool) (string, error),
+	placeholderFormat string,
+	buildFilter func(*Filter, *[]interface{}, int, bool) (string, int, error),
 ) (string, []interface{}, error) {
 	if q == nil || q.Table == "" || len(q.FieldsValue) == 0 {
 		return "", nil, ErrInvalidUpdateQuery
@@ -409,43 +511,38 @@ func (b *dynamicQueryBuilder) buildUpdateQueryWithContinuousIndex(
 	sort.Strings(fieldNames)
 
 	paramIndex := startIndex
-	setClause, args := b.buildPlaceholdersAndArgsWithIndex(q.FieldsValue, fieldNames, &paramIndex, nextPlaceholder)
+	setClause, args := b.buildPlaceholdersAndArgsWithIndex(q.FieldsValue, fieldNames, &paramIndex, placeholderFormat)
 
-	// Use strings.Builder for efficient string concatenation
-	var sb strings.Builder
-	sb.WriteString("UPDATE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" SET ")
-	sb.WriteString(setClause)
+	// Build the query with a byte buffer for efficient concatenation
+	buf := make([]byte, 0, len(q.Table)+len(setClause)+32)
+	buf = append(buf, "UPDATE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " SET "...)
+	buf = append(buf, setClause...)
 
 	if q.Filter != nil {
-		where, err := buildFilter(q.Filter, &args, &paramIndex, true)
+		where, _, err := buildFilter(q.Filter, &args, paramIndex, true)
 		if err != nil {
 			return "", nil, err
 		}
 		// Only add WHERE clause if filter produces non-empty result
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // buildUpdateQuery constructs an UPDATE SQL statement using default '?' placeholders.
 func (b *dynamicQueryBuilder) buildUpdateQuery(
 	q *UpdateQuery,
-	nextPlaceholder func(*int) string,
+	placeholderFormat string,
 	buildFilter func(*Filter, *[]interface{}) (string, error),
 ) (string, []interface{}, error) {
 	if q == nil || q.Table == "" || len(q.FieldsValue) == 0 {
 		return "", nil, ErrInvalidUpdateQuery
-	}
-
-	// Early validation: indexed placeholders require different method
-	if nextPlaceholder != nil {
-		return "", nil, fmt.Errorf("use buildUpdateQueryWithContinuousIndex for indexed placeholders")
 	}
 
 	// Preallocate field names slice for better memory efficiency
@@ -455,14 +552,14 @@ func (b *dynamicQueryBuilder) buildUpdateQuery(
 	}
 	sort.Strings(fieldNames)
 
-	setClause, args := b.buildPlaceholdersAndArgs(q.FieldsValue, fieldNames, "?")
+	setClause, args := b.buildPlaceholdersAndArgs(q.FieldsValue, fieldNames, placeholderFormat)
 
-	// Use strings.Builder for efficient string concatenation
-	var sb strings.Builder
-	sb.WriteString("UPDATE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" SET ")
-	sb.WriteString(setClause)
+	// Build the query with a byte buffer for efficient concatenation
+	buf := make([]byte, 0, len(q.Table)+len(setClause)+32)
+	buf = append(buf, "UPDATE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " SET "...)
+	buf = append(buf, setClause...)
 
 	if q.Filter != nil {
 		where, err := buildFilter(q.Filter, &args)
@@ -471,12 +568,12 @@ func (b *dynamicQueryBuilder) buildUpdateQuery(
 		}
 		// Only add WHERE clause if filter produces non-empty result
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // buildPlaceholdersAndArgsWithIndex generates SQL placeholders and argument slices with indexed placeholders.
@@ -484,52 +581,54 @@ func (b *dynamicQueryBuilder) buildPlaceholdersAndArgsWithIndex(
 	values interface{},
 	columns []string,
 	paramIndex *int,
-	nextPlaceholder func(*int) string,
+	placeholderFormat string,
 ) (string, []interface{}) {
 	switch v := values.(type) {
 	case []map[string]interface{}:
 		// Preallocate slices for better memory efficiency with bulk operations
-		placeholders := make([]string, 0, len(v))
 		args := make([]interface{}, 0, len(v)*len(columns))
+		buf := make([]byte, 0, len(v)*(len(columns)*3+2))
 
-		for _, row := range v {
-			rowPlaceholders := make([]string, len(columns))
-			for i, col := range columns {
-				args = append(args, row[col])
-				rowPlaceholders[i] = nextPlaceholder(paramIndex)
+		for ri, row := range v {
+			if ri > 0 {
+				buf = append(buf, ',', ' ')
 			}
-			// Avoid TrimSpace call since strings.Join doesn't add extra spaces
-			placeholders = append(placeholders, fmt.Sprintf("(%s)", strings.Join(rowPlaceholders, ", ")))
+			buf = append(buf, '(')
+			for ci, col := range columns {
+				if ci > 0 {
+					buf = append(buf, ',', ' ')
+				}
+				args = append(args, row[col])
+				buf = append(buf, placeholderFormat[:len(placeholderFormat)-2]...)
+				buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
+				(*paramIndex)++
+			}
+			buf = append(buf, ')')
 		}
-		return strings.Join(placeholders, ", "), args
+		return string(buf), args
 
 	case map[string]interface{}:
-		// Preallocate slices for single row operations
-		setParts := make([]string, len(columns))
+		// Preallocate slice for single row operations
 		args := make([]interface{}, len(columns))
+		buf := make([]byte, 0, len(columns)*16)
 
 		for i, col := range columns {
+			if i > 0 {
+				buf = append(buf, ',', ' ')
+			}
 			args[i] = v[col]
-			setParts[i] = fmt.Sprintf("%s = %s", col, nextPlaceholder(paramIndex))
+			buf = append(buf, col...)
+			buf = append(buf, ' ', '=')
+			buf = append(buf, ' ')
+			buf = append(buf, placeholderFormat[:len(placeholderFormat)-2]...)
+			buf = strconv.AppendInt(buf, int64(*paramIndex), 10)
+			(*paramIndex)++
 		}
-		return strings.Join(setParts, ", "), args
+		return string(buf), args
 
 	default:
 		return "", nil
 	}
-}
-
-// nextPlaceholder returns the next parameter placeholder string and increments the index.
-func (b *dynamicQueryBuilder) nextPlaceholder(paramIndex *int) string {
-	// Increment index first for both paths to avoid duplicate logic
-	*paramIndex++
-
-	if b.placeholderFormat == "?" {
-		return "?"
-	}
-
-	// Use previous index value for custom format placeholders
-	return fmt.Sprintf(b.placeholderFormat, *paramIndex-1)
 }
 
 // buildReturningClause returns the RETURNING clause for PostgreSQL and SQLite dialects.
@@ -538,7 +637,15 @@ func (b *dynamicQueryBuilder) buildReturningClause(returning []string) string {
 	if len(returning) == 0 {
 		return ""
 	}
-	return " RETURNING " + strings.Join(returning, ", ")
+	buf := make([]byte, 0, len(returning)*8+16)
+	buf = append(buf, " RETURNING "...)
+	for i, col := range returning {
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
+		buf = append(buf, col...)
+	}
+	return string(buf)
 }
 
 // buildOutputClause returns the OUTPUT clause for SQL Server dialect.
@@ -548,9 +655,15 @@ func (b *dynamicQueryBuilder) buildOutputClause(returning []string, prefix strin
 	if len(returning) == 0 {
 		return ""
 	}
-	cols := make([]string, len(returning))
+	buf := make([]byte, 0, len(returning)*(len(prefix)+16)+16)
+	buf = append(buf, " OUTPUT "...)
 	for i, col := range returning {
-		cols[i] = prefix + "." + col
+		if i > 0 {
+			buf = append(buf, ',', ' ')
+		}
+		buf = append(buf, prefix...)
+		buf = append(buf, '.')
+		buf = append(buf, col...)
 	}
-	return " OUTPUT " + strings.Join(cols, ", ")
+	return string(buf)
 }

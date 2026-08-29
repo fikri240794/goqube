@@ -1,7 +1,6 @@
 package goqube
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 )
@@ -33,7 +32,7 @@ func (b *mysqlBuilder) BuildDeleteQuery(q *DeleteQuery) (string, []interface{}, 
 
 // BuildInsertQuery builds a SQL INSERT statement and its arguments for MySQL.
 func (b *mysqlBuilder) BuildInsertQuery(q *InsertQuery) (string, []interface{}, error) {
-	return b.buildInsertQuery(q, 0, nil)
+	return b.buildInsertQuery(q, 0, "?")
 }
 
 // BuildSelectQuery builds a SQL SELECT statement and its arguments for MySQL.
@@ -49,21 +48,21 @@ func (b *mysqlBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{}, 
 
 	// Preallocate args slice with estimated capacity for typical SELECT queries
 	args := make([]interface{}, 0, 16)
-	var sb strings.Builder
-	sb.WriteString("SELECT ")
+	buf := make([]byte, 0, 128)
+	buf = append(buf, "SELECT "...)
 
 	fields, err := b.buildFields(q.Fields, &args)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(fields)
+	buf = append(buf, fields...)
 
 	table, err := b.buildTable(q.Table, &args)
 	if err != nil {
 		return "", nil, err
 	}
-	sb.WriteString(" FROM ")
-	sb.WriteString(table)
+	buf = append(buf, " FROM "...)
+	buf = append(buf, table...)
 
 	// Process JOINs only if they exist
 	if len(q.Joins) > 0 {
@@ -71,8 +70,8 @@ func (b *mysqlBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{}, 
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ")
-		sb.WriteString(joins)
+		buf = append(buf, ' ')
+		buf = append(buf, joins...)
 	}
 
 	// Process WHERE clause only if filter exists and produces content
@@ -82,8 +81,8 @@ func (b *mysqlBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{}, 
 			return "", nil, err
 		}
 		if where != "" {
-			sb.WriteString(" WHERE ")
-			sb.WriteString(where)
+			buf = append(buf, " WHERE "...)
+			buf = append(buf, where...)
 		}
 	}
 
@@ -93,8 +92,8 @@ func (b *mysqlBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{}, 
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" GROUP BY ")
-		sb.WriteString(groupBy)
+		buf = append(buf, " GROUP BY "...)
+		buf = append(buf, groupBy...)
 	}
 
 	// Process ORDER BY only if sorting is specified
@@ -103,33 +102,39 @@ func (b *mysqlBuilder) BuildSelectQuery(q *SelectQuery) (string, []interface{}, 
 		if err != nil {
 			return "", nil, err
 		}
-		sb.WriteString(" ORDER BY ")
-		sb.WriteString(orderBy)
+		buf = append(buf, " ORDER BY "...)
+		buf = append(buf, orderBy...)
 	}
 
 	// Add pagination clauses only when needed
 	if q.Take > 0 {
-		sb.WriteString(" LIMIT ?")
+		buf = append(buf, " LIMIT ?"...)
 		args = append(args, int64(q.Take))
 	}
 
 	if q.Skip > 0 {
-		sb.WriteString(" OFFSET ?")
+		buf = append(buf, " OFFSET ?"...)
 		args = append(args, int64(q.Skip))
 	}
 
 	// Handle aliasing with optimized string building
 	if q.Alias != "" {
-		return fmt.Sprintf("(%s) AS %s", strings.TrimSpace(sb.String()), q.Alias), args, nil
+		alias := strings.TrimSpace(string(buf))
+		out := make([]byte, 0, len(alias)+len(q.Alias)+6)
+		out = append(out, '(')
+		out = append(out, alias...)
+		out = append(out, ") AS "...)
+		out = append(out, q.Alias...)
+		return string(out), args, nil
 	}
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // BuildUpdateQuery builds a SQL UPDATE statement and its arguments for MySQL.
 func (b *mysqlBuilder) BuildUpdateQuery(q *UpdateQuery) (string, []interface{}, error) {
 	// Build the UPDATE query using the provided filter builder for complex WHERE logic.
-	return b.buildUpdateQuery(q, nil, func(f *Filter, args *[]interface{}) (string, error) {
+	return b.buildUpdateQuery(q, "?", func(f *Filter, args *[]interface{}) (string, error) {
 		return b.buildFilter(f, args, true)
 	})
 }
@@ -155,54 +160,62 @@ func (b *mysqlBuilder) BuildBulkUpdateQuery(q *BulkUpdateQuery) (string, []inter
 		return "", nil, ErrInvalidBulkUpdateQuery
 	}
 
-	var valuesRows []string
 	var args []interface{}
 
+	// Estimate the total buffer size up front so the whole query fits in a single allocation
+	total := 64 + len(q.Table) + len(q.PrimaryKey)*2 + len(columns)*6 + len(q.FieldsValues)*(16+len(columns)*8)
+	buf := make([]byte, 0, total)
+
+	buf = append(buf, "UPDATE "...)
+	buf = append(buf, q.Table...)
+	buf = append(buf, " AS t JOIN ("...)
 	for i, row := range q.FieldsValues {
 		pkVal, ok := row[q.PrimaryKey]
 		if !ok {
 			return "", nil, ErrInvalidBulkUpdateQueryPrimaryKey
 		}
 
-		var rowPlaceholders []string
-		
 		args = append(args, pkVal)
-		if i == 0 {
-			rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("? AS %s", q.PrimaryKey))
-		} else {
-			rowPlaceholders = append(rowPlaceholders, "?")
+
+		if i > 0 {
+			buf = append(buf, " UNION ALL "...)
 		}
 
-		for _, col := range columns {
-			args = append(args, row[col])
-			if i == 0 {
-				rowPlaceholders = append(rowPlaceholders, fmt.Sprintf("? AS %s", col))
-			} else {
-				rowPlaceholders = append(rowPlaceholders, "?")
+		// Build the "SELECT <placeholder list>" for this row inline.
+		// The first row aliases placeholders with column names; later rows use plain "?".
+		buf = append(buf, "SELECT "...)
+		if i == 0 {
+			buf = append(buf, "? AS "...)
+			buf = append(buf, q.PrimaryKey...)
+			for _, col := range columns {
+				args = append(args, row[col])
+				buf = append(buf, ", ? AS "...)
+				buf = append(buf, col...)
+			}
+		} else {
+			buf = append(buf, '?')
+			for _, col := range columns {
+				args = append(args, row[col])
+				buf = append(buf, ", ?"...)
 			}
 		}
-		
-		valuesRows = append(valuesRows, fmt.Sprintf("SELECT %s", strings.Join(rowPlaceholders, ", ")))
 	}
-
-	var sb strings.Builder
-	sb.WriteString("UPDATE ")
-	sb.WriteString(q.Table)
-	sb.WriteString(" AS t JOIN (")
-	sb.WriteString(strings.Join(valuesRows, " UNION ALL "))
-	sb.WriteString(") AS c ON t.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" = c.")
-	sb.WriteString(q.PrimaryKey)
-	sb.WriteString(" SET ")
-	
-	setParts := make([]string, len(columns))
+	buf = append(buf, ") AS c ON t."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, " = c."...)
+	buf = append(buf, q.PrimaryKey...)
+	buf = append(buf, " SET "...)
 	for i, col := range columns {
-		setParts[i] = fmt.Sprintf("t.%s = c.%s", col, col)
+		if i > 0 {
+			buf = append(buf, ", "...)
+		}
+		buf = append(buf, "t."...)
+		buf = append(buf, col...)
+		buf = append(buf, " = c."...)
+		buf = append(buf, col...)
 	}
-	sb.WriteString(strings.Join(setParts, ", "))
 
-	return sb.String(), args, nil
+	return string(buf), args, nil
 }
 
 // buildFields returns the SQL representation of fields for MySQL, supporting subqueries and aliases.
